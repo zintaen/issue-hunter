@@ -26,7 +26,7 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [approvalBranch, setApprovalBranch] = useState(null);
   const [approvalDiff, setApprovalDiff] = useState(null);
-  const wsRef = useRef(null);
+  const [approvalHuntId, setApprovalHuntId] = useState(null);
   const logsEndRef = useRef(null);
 
   // History State
@@ -72,7 +72,7 @@ function App() {
   }, [apiKey, githubToken, baseUrl]);
 
   const handleApprove = async (action) => {
-    const repoName = repoUrl.split('/').pop();
+    if (!approvalHuntId) return;
     try {
       await fetch('/api/approve', {
         method: 'POST',
@@ -80,9 +80,11 @@ function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({ repo_name: repoName, action })
+        body: JSON.stringify({ hunt_id: approvalHuntId, action })
       });
       setApprovalBranch(null);
+      setApprovalDiff(null);
+      setApprovalHuntId(null);
     } catch (e) {
       alert("Error sending approval: " + e.message);
     }
@@ -97,9 +99,11 @@ function App() {
       if (data.pending && data.pending.length > 0) {
         setApprovalBranch(data.pending[0].branch);
         setApprovalDiff(data.pending[0].diff);
+        setApprovalHuntId(data.pending[0].hunt_id);
       } else {
         setApprovalBranch(null);
         setApprovalDiff(null);
+        setApprovalHuntId(null);
       }
     } catch (e) {
       console.error(e);
@@ -108,23 +112,6 @@ function App() {
 
   useEffect(() => {
     if (authToken) fetchPendingApprovals();
-  }, [authToken]);
-
-  useEffect(() => {
-    if (!authToken) return;
-    const ws = new WebSocket((window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/ws/stream');
-    
-    ws.onmessage = (event) => {
-      const msg = event.data;
-      setLogs((prev) => [...prev, msg]);
-      
-      if (msg.startsWith('__APPROVAL_REQUIRED__:')) {
-        fetchPendingApprovals();
-      }
-    };
-
-    wsRef.current = ws;
-    return () => ws.close();
   }, [authToken]);
 
   const handleLogin = async (e) => {
@@ -160,12 +147,14 @@ function App() {
 
     setIsRunning(true);
     setApprovalBranch(null);
+    setApprovalDiff(null);
+    setApprovalHuntId(null);
     setLogs(["[SYSTEM] Connecting to Issue Hunter Backend..."]);
 
     const issueNum = parseInt(issueLinks.split('/').pop());
 
     try {
-      await fetch('/api/hunt', {
+      const res = await fetch('/api/hunt', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -181,31 +170,49 @@ function App() {
           base_url: baseUrl || undefined
         })
       });
+
+      if (!res.ok) {
+        throw new Error("Failed to start hunt. Server responded with " + res.status);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        
+        let boundary = buffer.indexOf('\\n\\n');
+        while (boundary !== -1) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          
+          if (chunk.startsWith('data: ')) {
+            let msg = chunk.slice(6).replace(/\\|\\|n\\|\\|/g, '\\n');
+            if (msg.startsWith('__APPROVAL_REQUIRED__:')) {
+              fetchPendingApprovals();
+            } else {
+              setLogs(prev => [...prev, msg]);
+            }
+          }
+          
+          boundary = buffer.indexOf('\\n\\n');
+        }
+      }
+      setIsRunning(false);
+
     } catch (error) {
       console.error("Failed to start hunt", error);
       setIsRunning(false);
+      setLogs(prev => [...prev, `[ERROR] ${error.message}`]);
     }
   };
 
-  const handleApproval = async (action) => {
-    try {
-      await fetch('/api/approve', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-          repo_name: repoUrl.split('/').pop(),
-          action: action
-        })
-      });
-      setApprovalBranch(null);
-      setApprovalDiff(null);
-    } catch (e) {
-      console.error("Approval error", e);
-    }
-  };
+  // handleApproval is duplicate of handleApprove, removing.
 
   const renderDiff = (diffStr) => {
     if (!diffStr) return <div style={{ color: 'var(--text-secondary)' }}>No diff available.</div>;
@@ -233,27 +240,40 @@ function App() {
       const targets = JSON.parse(benchmarkInput);
       if (!Array.isArray(targets)) throw new Error("Input must be a JSON array.");
       
-      const res = await fetch('/api/benchmark', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-          targets: targets,
-          provider: provider,
-          model: model,
-          api_key: apiKey,
-          github_token: githubToken,
-          base_url: baseUrl || undefined
-        })
-      });
-      if (res.ok) {
-        alert("Benchmark batch queued successfully! Check the History tab for progress.");
-        setActiveTab('history');
-      } else {
-        alert("Failed to start benchmark.");
+      alert("Benchmark batch starting via client-side orchestration! Check the History tab for completed hunts.");
+      setActiveTab('history');
+      
+      for (const target of targets) {
+        try {
+          const res = await fetch('/api/hunt', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+              repo_url: target.repo_url,
+              issues: target.issues,
+              provider: provider,
+              model: model,
+              api_key: apiKey,
+              github_token: githubToken,
+              base_url: baseUrl || undefined
+            })
+          });
+          
+          if (res.ok) {
+            const reader = res.body.getReader();
+            while (true) {
+              const { done } = await reader.read();
+              if (done) break;
+            }
+          }
+        } catch (e) {
+          console.error("Benchmark item failed:", target.repo_url, e);
+        }
       }
+      
     } catch (e) {
       alert("Invalid JSON format or error: " + e.message);
     }

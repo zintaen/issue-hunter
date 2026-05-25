@@ -1,11 +1,12 @@
 import os
 from google.antigravity import Agent, LocalAgentConfig, types
-from agents.tools import run_command_in_docker, create_branch, commit_and_push, semantic_search, web_search, fetch_webpage
-
+from agents.tools import (
+    run_command_in_docker, create_branch, commit_and_push, web_search, fetch_webpage,
+    e2b_view_file, e2b_write_file, e2b_grep_search
+)
 import asyncio
 
 async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, previous_feedback: str = None, log_callback = None) -> tuple[bool, str]:
-    """Runs the Solver Agent to investigate an issue, fix it, and push the branch."""
     async def log(msg: str):
         if log_callback:
             if asyncio.iscoroutinefunction(log_callback):
@@ -21,33 +22,38 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
     def bound_commit_and_push(branch_name: str, commit_message: str) -> str:
         return commit_and_push(repo_dir, branch_name, commit_message)
         
-    def bound_semantic_search(query: str, n_results: int = 5) -> str:
-        return semantic_search(repo_dir, query, n_results)
-    
-    # Tools available to the solver agent
     tools = [
         run_command_in_docker,
         bound_create_branch,
         bound_commit_and_push,
-        bound_semantic_search,
         web_search,
-        fetch_webpage
+        fetch_webpage,
+        e2b_view_file,
+        e2b_write_file,
+        e2b_grep_search
     ]
     
-    denied_tools = [types.BuiltinTools.RUN_COMMAND]
+    denied_tools = [
+        types.BuiltinTools.RUN_COMMAND, 
+        types.BuiltinTools.VIEW_FILE, 
+        types.BuiltinTools.REPLACE_FILE_CONTENT, 
+        types.BuiltinTools.MULTI_REPLACE_FILE_CONTENT, 
+        types.BuiltinTools.WRITE_TO_FILE, 
+        types.BuiltinTools.GREP_SEARCH,
+        types.BuiltinTools.FIND_FILE
+    ]
     
     system_instructions = (
         "You are an expert autonomous software engineer. Your task is to fix a bug in a codebase based on a GitHub issue. "
-        "The repository is mounted at `/workspace` inside a secure Docker container for command execution.\n\n"
+        "The repository is mounted at `/workspace` inside a secure E2B Sandbox for command execution.\n\n"
         "STEPS:\n"
-        "1. You MUST use `semantic_search` to find relevant code snippets related to the issue before doing manual searches. It searches an AST-chunked index of the repository.\n"
-        "2. If `semantic_search` doesn't find everything, use `grep_search` and `find_file` to locate the buggy files.\n"
-        "3. Use `web_search` and `fetch_webpage` to lookup documentation or stack overflow if you are unsure about a library or API.\n"
-        "4. Use `view_file` to read the relevant code, and `multi_replace_file_content` to edit files.\n"
-        "5. Create a new branch using `create_branch`.\n"
-        "6. Write the fix and write a unit test to verify it.\n"
-        "7. Use `run_command_in_docker` to run the tests and ensure the fix works.\n"
-        "8. Commit and push the branch using `commit_and_push(branch_name, commit_message)`.\n\n"
+        "1. You MUST use `e2b_grep_search` and `run_command_in_docker('find .')` to find relevant code snippets related to the issue before doing manual searches.\n"
+        "2. Use `web_search` and `fetch_webpage` to lookup documentation or stack overflow if you are unsure about a library or API.\n"
+        "3. Use `e2b_view_file` to read the relevant code, and `e2b_write_file` to rewrite files with your fixes.\n"
+        "4. Create a new branch using `create_branch`.\n"
+        "5. Write the fix and write a unit test to verify it.\n"
+        "6. Use `run_command_in_docker` to run the tests and ensure the fix works.\n"
+        "7. Commit and push the branch using `commit_and_push(branch_name, commit_message)`.\n\n"
         "Always explain your reasoning before making changes."
     )
     
@@ -72,6 +78,4 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
         response = await agent.chat(prompt)
         final_summary = await response.text()
         await log("Solver Agent finished.")
-        # Determine success heuristically or ask the agent to return structured output.
-        # For this PoC, we assume success if it didn't crash.
         return True, final_summary

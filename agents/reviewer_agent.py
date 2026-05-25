@@ -1,10 +1,9 @@
 import asyncio
 import os
-import subprocess
-from agents.tools import run_command_in_docker, web_search, fetch_webpage
+from agents.tools import run_command_in_docker, web_search, fetch_webpage, get_git_diff
 from google.antigravity import LocalAgentConfig, Agent
 
-async def run_reviewer_agent(repo_dir: str, issue_details: str, api_key: str, model: str = None, log_callback = None):
+async def run_reviewer_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, log_callback = None):
     """Runs the Reviewer Agent to analyze git diffs and provide feedback."""
     async def log(msg: str):
         if log_callback:
@@ -23,23 +22,13 @@ async def run_reviewer_agent(repo_dir: str, issue_details: str, api_key: str, mo
 
     await log("\n[REVIEWER AGENT] Starting code review...")
     
-    # 1. Fetch git diff
-    try:
-        # Assuming the solver has committed changes
-        diff_output = subprocess.check_output(
-            ["git", "diff", "main...HEAD"],
-            cwd=repo_dir,
-            stderr=subprocess.STDOUT
-        ).decode("utf-8")
+    # 1. Fetch git diff using E2B
+    diff_output = get_git_diff(repo_dir, branch_name)
+    
+    if not diff_output or not diff_output.strip():
+        await log("[REVIEWER AGENT] No code changes detected. Rejecting.")
+        return False, "No code changes detected in the branch."
         
-        if not diff_output.strip():
-            await log("[REVIEWER AGENT] No code changes detected. Rejecting.")
-            return False, "No code changes detected in the branch."
-            
-    except subprocess.CalledProcessError as e:
-        await log(f"[REVIEWER AGENT] Failed to fetch diff: {e.output.decode('utf-8')}")
-        return False, "Failed to fetch git diff."
-
     system_prompt = f"""You are the Reviewer Agent. Your job is to review the code changes made by the Solver Agent.
 You will be provided with the original issue description and the `git diff` of the changes.
 Critique the code for:

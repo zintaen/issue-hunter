@@ -1,12 +1,12 @@
 google-antigravity
 PyGithub
 GitPython
-docker
+e2b_code_interpreter
 python-dotenv
 rich
 fastapi
 uvicorn
-websockets
+supabase
 chromadb
 sentence-transformers
 python-gitlab
