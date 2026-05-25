@@ -113,6 +113,9 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             # Ideally, these are configured for the deployed server.
             api_key = os.getenv("LLM_API_KEY", "")
             github_token = os.getenv("GITHUB_TOKEN", "")
+            base_url = os.getenv("LLM_BASE_URL", None)
+            provider = os.getenv("LLM_PROVIDER", "gemini")
+            model = os.getenv("LLM_MODEL", "gemini-3.5-pro")
             
             if not api_key or not github_token:
                 print("Webhook received but missing env vars for execution.")
@@ -121,18 +124,19 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             hunt_id = create_hunt(
                 repo_url=repo_url,
                 issues=[issue_num],
-                provider="gemini", # Default fallback
-                model="gemini-3.5-pro"
+                provider=provider,
+                model=model
             )
             background_tasks.add_task(
                 run_workflow,
                 hunt_id,
                 repo_url,
                 [issue_num],
-                "gemini",
-                "gemini-3.5-pro",
+                provider,
+                model,
                 api_key,
-                github_token
+                github_token,
+                base_url
             )
             return {"status": "workflow queued via webhook", "hunt_id": hunt_id}
             
