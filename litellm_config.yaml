@@ -1,5 +1,0 @@
-model_list:
-  - model_name: "gemini-3.5-pro"
-    litellm_params:
-      model: "openai/gpt-4o" # Example mapping, the user will supply the real OpenAI API key via UI.
-      api_key: "os.environ/OPENAI_API_KEY"

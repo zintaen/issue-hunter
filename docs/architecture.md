@@ -5,8 +5,7 @@ Issue Hunter operates as a robust agentic application separated into frontend, b
 ## 1. System Components
 - **Frontend (React / Vite):** Presents a clean Glassmorphism interface. Manages state for Hunt Configuration, Live Terminal streaming via WebSockets, History parsing, and the interactive Diff Viewer.
 - **Backend (FastAPI):** Exposes REST API endpoints and WebSockets for real-time Agent communication. Manages the SQLite database for persistence.
-- **Agent Orchestrator (Antigravity SDK):** The core engine residing in `agents/orchestrator.py`. Handles the multi-step workflows of cloning repositories, setting up Docker sandboxes, initializing RAG embeddings, and dispatching tasks to specific sub-agents.
-- **LiteLLM Proxy:** A Dockerized container that proxies requests to any underlying LLM (OpenAI, Anthropic, Gemini) allowing the Antigravity SDK to be model-agnostic.
+- **Agent Orchestrator (Antigravity SDK):** The core engine residing in `agents/orchestrator.py`. Handles the multi-step workflows of cloning repositories, setting up Docker sandboxes, initializing RAG embeddings, and dispatching tasks to specific sub-agents. It natively routes prompts to any underlying LLM (OpenAI, Anthropic, Gemini) by managing API keys directly in the environment, making the SDK model-agnostic.
 
 ## 2. Multi-Agent Workflow
 1. **Setup Agent:** Inspects the repository structure and ensures the issue can be reproduced within the Docker container.

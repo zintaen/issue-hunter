@@ -41,7 +41,7 @@ function App() {
   // Fetch hunts for history tab
   useEffect(() => {
     if (activeTab === 'history' && authToken) {
-      fetch('http://localhost:8000/api/hunts', {
+      fetch('/api/hunts', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       })
         .then(res => res.json())
@@ -53,7 +53,7 @@ function App() {
   const handleSelectHunt = async (hunt) => {
     setSelectedHunt(hunt);
     try {
-      const res = await fetch(`http://localhost:8000/api/hunts/${hunt.id}/logs`, {
+      const res = await fetch(`/api/hunts/${hunt.id}/logs`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       const logsData = await res.json();
@@ -72,7 +72,7 @@ function App() {
   const handleApprove = async (action) => {
     const repoName = repoUrl.split('/').pop();
     try {
-      await fetch('http://localhost:8000/api/approve', {
+      await fetch('/api/approve', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ function App() {
 
   const fetchPendingApprovals = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/approvals', {
+      const res = await fetch('/api/approvals', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -110,7 +110,7 @@ function App() {
 
   useEffect(() => {
     if (!authToken) return;
-    const ws = new WebSocket('ws://localhost:8000/ws/stream');
+    const ws = new WebSocket((window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/ws/stream');
     
     ws.onmessage = (event) => {
       const msg = event.data;
@@ -128,7 +128,7 @@ function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:8000/api/login', {
+      const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: passwordInput })
@@ -163,7 +163,7 @@ function App() {
     const issueNum = parseInt(issueLinks.split('/').pop());
 
     try {
-      await fetch('http://localhost:8000/api/hunt', {
+      await fetch('/api/hunt', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -186,7 +186,7 @@ function App() {
 
   const handleApproval = async (action) => {
     try {
-      await fetch('http://localhost:8000/api/approve', {
+      await fetch('/api/approve', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -230,7 +230,7 @@ function App() {
       const targets = JSON.parse(benchmarkInput);
       if (!Array.isArray(targets)) throw new Error("Input must be a JSON array.");
       
-      const res = await fetch('http://localhost:8000/api/benchmark', {
+      const res = await fetch('/api/benchmark', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
