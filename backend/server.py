@@ -1,5 +1,7 @@
 import asyncio
 from fastapi import FastAPI, WebSocket, BackgroundTasks, Depends, HTTPException, status, Header, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -58,6 +60,7 @@ class HuntRequest(BaseModel):
     model: str
     api_key: str
     github_token: str
+    base_url: Optional[str] = None
 
 class BenchmarkItem(BaseModel):
     repo_url: str
@@ -69,6 +72,7 @@ class BenchmarkRequest(BaseModel):
     model: str
     api_key: str
     github_token: str
+    base_url: Optional[str] = None
 
 class ApproveRequest(BaseModel):
     repo_name: str
@@ -151,7 +155,8 @@ async def start_hunt(request: HuntRequest, background_tasks: BackgroundTasks, to
         request.provider,
         request.model,
         request.api_key,
-        request.github_token
+        request.github_token,
+        request.base_url
     )
     return {"status": "workflow queued", "hunt_id": hunt_id}
 
@@ -174,7 +179,8 @@ async def start_benchmark(request: BenchmarkRequest, background_tasks: Backgroun
             request.provider,
             request.model,
             request.api_key,
-            request.github_token
+            request.github_token,
+            request.base_url
         )
     return {"status": "benchmark batch queued", "hunt_ids": hunt_ids}
 
@@ -186,7 +192,7 @@ def list_hunts(token: str = Depends(verify_token)):
 def fetch_hunt_logs(hunt_id: str, token: str = Depends(verify_token)):
     return get_hunt_logs(hunt_id)
 
-async def run_workflow(hunt_id: str, repo_url: str, issues: List[int], provider: str, model: str, api_key: str, github_token: str):
+async def run_workflow(hunt_id: str, repo_url: str, issues: List[int], provider: str, model: str, api_key: str, github_token: str, base_url: str = None):
     async def log_with_db(msg: str):
         insert_log(hunt_id, msg)
         await log_queue.put(msg)
@@ -218,6 +224,7 @@ async def run_workflow(hunt_id: str, repo_url: str, issues: List[int], provider:
             issue_numbers=issues,
             model=model,
             provider=provider,
+            base_url=base_url,
             api_key=api_key,
             github_token=github_token,
             workspace_base_dir=workspace,
@@ -240,3 +247,16 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_text(message)
     except Exception as e:
         print("WebSocket disconnected:", e)
+
+# Mount frontend static files
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+
+if os.path.isdir(frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("ws/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+

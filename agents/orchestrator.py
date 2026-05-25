@@ -23,6 +23,7 @@ async def run_orchestrator(
     api_key: str,
     model: str = None,
     provider: str = "gemini",
+    base_url: str = None,
     dry_run: bool = False,
     log_callback = None,
     approval_callback = None
@@ -44,16 +45,22 @@ async def run_orchestrator(
     # The Antigravity SDK will pick these up automatically based on the model provided.
     if provider == "openai":
         os.environ["OPENAI_API_KEY"] = api_key
+        if base_url:
+            os.environ["OPENAI_API_BASE"] = base_url
         await log(f"Native routing for OpenAI model: {model}")
     elif provider == "anthropic":
         os.environ["ANTHROPIC_API_KEY"] = api_key
+        if base_url:
+            os.environ["ANTHROPIC_API_BASE"] = base_url
         await log(f"Native routing for Anthropic model: {model}")
     else:
         os.environ["GEMINI_API_KEY"] = api_key
+        if base_url:
+            os.environ["GEMINI_API_BASE"] = base_url
+        else:
+            if "GEMINI_API_BASE" in os.environ:
+                del os.environ["GEMINI_API_BASE"]
         await log(f"Native routing for Gemini model: {model}")
-
-    if "GEMINI_API_BASE" in os.environ:
-        del os.environ["GEMINI_API_BASE"]
 
     await log(f"Starting Issue Hunter workflow for {target_repo}...")
     

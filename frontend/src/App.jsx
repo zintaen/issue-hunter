@@ -12,6 +12,7 @@ function App() {
   const [model, setModel] = useState('gemini-3.5-pro');
   const [apiKey, setApiKey] = useState(localStorage.getItem('llm_api_key') || '');
   const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '');
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem('base_url') || '');
 
   // Target State
   const [repoUrl, setRepoUrl] = useState('');
@@ -67,7 +68,8 @@ function App() {
   useEffect(() => {
     localStorage.setItem('llm_api_key', apiKey);
     localStorage.setItem('github_token', githubToken);
-  }, [apiKey, githubToken]);
+    localStorage.setItem('base_url', baseUrl);
+  }, [apiKey, githubToken, baseUrl]);
 
   const handleApprove = async (action) => {
     const repoName = repoUrl.split('/').pop();
@@ -175,7 +177,8 @@ function App() {
           provider: provider,
           model: model,
           api_key: apiKey,
-          github_token: githubToken
+          github_token: githubToken,
+          base_url: baseUrl || undefined
         })
       });
     } catch (error) {
@@ -241,7 +244,8 @@ function App() {
           provider: provider,
           model: model,
           api_key: apiKey,
-          github_token: githubToken
+          github_token: githubToken,
+          base_url: baseUrl || undefined
         })
       });
       if (res.ok) {
@@ -331,8 +335,8 @@ function App() {
               <label>LLM Provider</label>
               <select value={provider} onChange={e => setProvider(e.target.value)}>
                 <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI (Coming Soon)</option>
-                <option value="anthropic">Anthropic (Coming Soon)</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
               </select>
             </div>
             
@@ -364,6 +368,16 @@ function App() {
               value={githubToken} 
               onChange={e => setGithubToken(e.target.value)}
               placeholder="ghp_xxxxxxxxxxxx"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Custom Base URL (Optional)</label>
+            <input 
+              type="text" 
+              value={baseUrl} 
+              onChange={e => setBaseUrl(e.target.value)}
+              placeholder="e.g. http://localhost:11434/v1"
             />
           </div>
         </div>
@@ -478,8 +492,8 @@ function App() {
                 <label>LLM Provider</label>
                 <select value={provider} onChange={e => setProvider(e.target.value)}>
                   <option value="gemini">Google Gemini</option>
-                  <option value="openai">OpenAI (LiteLLM Proxy)</option>
-                  <option value="anthropic">Anthropic (LiteLLM Proxy)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
                 </select>
               </div>
               
@@ -513,6 +527,16 @@ function App() {
                 placeholder="ghp_xxxxxxxxxxxx"
               />
             </div>
+
+            <div className="form-group">
+            <label>Custom Base URL (Optional)</label>
+            <input 
+              type="text" 
+              value={baseUrl} 
+              onChange={e => setBaseUrl(e.target.value)}
+              placeholder="e.g. http://localhost:11434/v1"
+            />
+          </div>
           </div>
 
           {/* Benchmark Panel */}
