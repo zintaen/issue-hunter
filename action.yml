@@ -1,0 +1,37 @@
+name: 'Issue Hunter'
+description: 'Autonomous AI agents that resolve GitHub, GitLab, and Bitbucket issues.'
+branding:
+  icon: 'cpu'
+  color: 'blue'
+inputs:
+  provider:
+    description: 'LLM Provider (gemini, openai, anthropic)'
+    required: false
+    default: 'gemini'
+  model:
+    description: 'LLM Model (e.g., gemini-3.5-pro, gpt-4o, claude-3-opus)'
+    required: false
+  api-key:
+    description: 'API key for the LLM provider'
+    required: true
+  github-token:
+    description: 'GitHub token for cloning and PRs'
+    required: true
+    default: ${{ github.token }}
+  repository:
+    description: 'Target repository url (e.g., https://github.com/org/repo)'
+    required: true
+    default: ${{ github.server_url }}/${{ github.repository }}
+  issue-number:
+    description: 'Issue number to resolve'
+    required: true
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.provider }}
+    - ${{ inputs.model }}
+    - ${{ inputs.api-key }}
+    - ${{ inputs.github-token }}
+    - ${{ inputs.repository }}
+    - ${{ inputs.issue-number }}

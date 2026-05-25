@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount Docker socket so the orchestrator can spawn sibling containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist the sqlite database
+      - issue_hunter_data:/app/backend
+    depends_on:
+      - litellm
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    command: [ "--config", "/app/litellm_config.yaml" ]
+    volumes:
+      - ./litellm_config.yaml:/app/litellm_config.yaml
+
+volumes:
+  issue_hunter_data:

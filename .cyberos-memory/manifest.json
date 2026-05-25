@@ -1,0 +1,9 @@
+{
+  "actor": "cyberos-cli",
+  "created_at_ns": 1779652827740434000,
+  "crypto_mode": "chained",
+  "cyberos_version": "0.1.0",
+  "fingerprint": "e08571e9e362f501",
+  "imports": {},
+  "version": 2
+}
