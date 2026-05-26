@@ -20,7 +20,7 @@ def start_sandbox(repo_dir: str) -> str:
     if not api_key:
         print("WARNING: E2B_API_KEY not found. Operations requiring execution will fail.")
         return "Failed"
-    active_sandbox = Sandbox()
+    active_sandbox = Sandbox.create()
     active_sandbox.commands.run("sudo apt-get update && sudo apt-get install -y git")
     return "E2B Cloud Sandbox started successfully."
 
