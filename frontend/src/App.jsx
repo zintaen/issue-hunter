@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, History, List, Lock } from 'lucide-react';
+import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, History, List, Lock, X } from 'lucide-react';
 import './index.css';
 
 function App() {
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || null);
   const [passwordInput, setPasswordInput] = useState('');
   
-  const [activeTab, setActiveTab] = useState('hunt'); // 'hunt' or 'history' or 'benchmark'
   // Configuration State
-  const [provider, setProvider] = useState('gemini');
-  const [model, setModel] = useState('gemini-3.5-pro');
+  const [provider, setProvider] = useState(localStorage.getItem('provider') || 'gemini');
+  const [model, setModel] = useState(localStorage.getItem('model') || 'gemini-3.5-pro');
   const [apiKey, setApiKey] = useState(localStorage.getItem('llm_api_key') || '');
   const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '');
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('base_url') || '');
@@ -17,9 +16,6 @@ function App() {
   // Target State
   const [repoUrl, setRepoUrl] = useState('');
   const [issueLinks, setIssueLinks] = useState('');
-  
-  // Benchmark State
-  const [benchmarkInput, setBenchmarkInput] = useState('[\n  {\n    "repo_url": "https://github.com/chalk/chalk",\n    "issues": [669]\n  }\n]');
 
   // Execution State
   const [isRunning, setIsRunning] = useState(false);
@@ -39,9 +35,9 @@ function App() {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // Fetch hunts for history tab
-  useEffect(() => {
-    if (activeTab === 'history' && authToken) {
+  // Fetch hunts for history sidebar
+  const fetchHunts = () => {
+    if (authToken) {
       fetch('/api/hunts', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       })
@@ -49,7 +45,11 @@ function App() {
         .then(data => setHunts(data))
         .catch(err => console.error("Error fetching hunts:", err));
     }
-  }, [activeTab, authToken]);
+  };
+
+  useEffect(() => {
+    fetchHunts();
+  }, [authToken]);
 
   const handleSelectHunt = async (hunt) => {
     setSelectedHunt(hunt);
@@ -66,10 +66,12 @@ function App() {
 
   // Save config to local storage
   useEffect(() => {
+    localStorage.setItem('provider', provider);
+    localStorage.setItem('model', model);
     localStorage.setItem('llm_api_key', apiKey);
     localStorage.setItem('github_token', githubToken);
     localStorage.setItem('base_url', baseUrl);
-  }, [apiKey, githubToken, baseUrl]);
+  }, [provider, model, apiKey, githubToken, baseUrl]);
 
   const handleApprove = async (action) => {
     if (!approvalHuntId) return;
@@ -146,6 +148,7 @@ function App() {
     }
 
     setIsRunning(true);
+    setSelectedHunt(null); // Clear selected history item
     setApprovalBranch(null);
     setApprovalDiff(null);
     setApprovalHuntId(null);
@@ -204,15 +207,15 @@ function App() {
         }
       }
       setIsRunning(false);
+      fetchHunts(); // Refresh history list
 
     } catch (error) {
       console.error("Failed to start hunt", error);
       setIsRunning(false);
       setLogs(prev => [...prev, `[ERROR] ${error.message}`]);
+      fetchHunts(); // Refresh history list
     }
   };
-
-  // handleApproval is duplicate of handleApprove, removing.
 
   const renderDiff = (diffStr) => {
     if (!diffStr) return <div style={{ color: 'var(--text-secondary)' }}>No diff available.</div>;
@@ -228,55 +231,6 @@ function App() {
         </div>
       );
     });
-  };
-
-  const handleStartBenchmark = async () => {
-    if (!apiKey || !githubToken || !benchmarkInput) {
-      alert("Please fill in API Key, GitHub Token, and the Benchmark JSON.");
-      return;
-    }
-
-    try {
-      const targets = JSON.parse(benchmarkInput);
-      if (!Array.isArray(targets)) throw new Error("Input must be a JSON array.");
-      
-      alert("Benchmark batch starting via client-side orchestration! Check the History tab for completed hunts.");
-      setActiveTab('history');
-      
-      for (const target of targets) {
-        try {
-          const res = await fetch('/api/hunt', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify({
-              repo_url: target.repo_url,
-              issues: target.issues,
-              provider: provider,
-              model: model,
-              api_key: apiKey,
-              github_token: githubToken,
-              base_url: baseUrl || undefined
-            })
-          });
-          
-          if (res.ok) {
-            const reader = res.body.getReader();
-            while (true) {
-              const { done } = await reader.read();
-              if (done) break;
-            }
-          }
-        } catch (e) {
-          console.error("Benchmark item failed:", target.repo_url, e);
-        }
-      }
-      
-    } catch (e) {
-      alert("Invalid JSON format or error: " + e.message);
-    }
   };
 
   if (!authToken) {
@@ -303,36 +257,15 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="app-container" style={{ maxWidth: '100%', padding: '2rem' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h1>Issue Hunter</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
             Autonomous AI agent for fixing open-source bugs.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', background: 'var(--panel-bg)', padding: '0.5rem', borderRadius: '12px' }}>
-          <button 
-            className={`btn ${activeTab === 'hunt' ? 'active' : ''}`} 
-            style={{ background: activeTab === 'hunt' ? 'var(--accent-color)' : 'transparent' }}
-            onClick={() => setActiveTab('hunt')}
-          >
-            <Crosshair size={16} /> Hunt
-          </button>
-          <button 
-            className={`btn ${activeTab === 'history' ? 'active' : ''}`} 
-            style={{ background: activeTab === 'history' ? 'var(--accent-color)' : 'transparent' }}
-            onClick={() => setActiveTab('history')}
-          >
-            <History size={16} /> History
-          </button>
-          <button 
-            className={`btn ${activeTab === 'benchmark' ? 'active' : ''}`} 
-            style={{ background: activeTab === 'benchmark' ? 'var(--accent-color)' : 'transparent' }}
-            onClick={() => setActiveTab('benchmark')}
-          >
-            <List size={16} /> Benchmark
-          </button>
+        <div>
           <button 
             className="btn" 
             style={{ background: 'var(--danger-color)' }}
@@ -343,283 +276,148 @@ function App() {
         </div>
       </header>
 
-      {activeTab === 'hunt' ? (
-        <>
-          <div className="grid-2">
-        {/* Configuration Panel */}
-        <div className="glass-panel">
-          <h2><Settings size={20} /> Configuration</h2>
-          
-          <div className="grid-2">
-            <div className="form-group">
-              <label>LLM Provider</label>
-              <select value={provider} onChange={e => setProvider(e.target.value)}>
-                <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </div>
-            
-            <div className="form-group">
-              <label>Model</label>
-              <input 
-                type="text" 
-                value={model} 
-                onChange={e => setModel(e.target.value)}
-                placeholder="e.g. gemini-3.5-pro"
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label><Key size={14} style={{display:'inline', marginRight:4}} /> API Key</label>
-            <input 
-              type="password" 
-              value={apiKey} 
-              onChange={e => setApiKey(e.target.value)}
-              placeholder="Your LLM API Key"
-            />
-          </div>
-
-          <div className="form-group">
-            <label><GitBranch size={14} style={{display:'inline', marginRight:4}} /> GitHub Token</label>
-            <input 
-              type="password" 
-              value={githubToken} 
-              onChange={e => setGithubToken(e.target.value)}
-              placeholder="ghp_xxxxxxxxxxxx"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Custom Base URL (Optional)</label>
-            <input 
-              type="text" 
-              value={baseUrl} 
-              onChange={e => setBaseUrl(e.target.value)}
-              placeholder="e.g. http://localhost:11434/v1"
-            />
-          </div>
-        </div>
-
-        {/* Target Panel */}
-        <div className="glass-panel">
-          <h2><Crosshair size={20} /> Target Mission</h2>
-          
-          <div className="form-group">
-            <label>Repository URL</label>
-            <input 
-              type="text" 
-              value={repoUrl} 
-              onChange={e => setRepoUrl(e.target.value)}
-              placeholder="https://github.com/chalk/chalk"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Issue Numbers or Links</label>
-            <input 
-              type="text" 
-              value={issueLinks} 
-              onChange={e => setIssueLinks(e.target.value)}
-              placeholder="669, 702 or https://github.com/chalk/chalk/issues/669"
-            />
-          </div>
-
-          <button 
-            className="btn" 
-            onClick={handleStartHunt} 
-            disabled={isRunning}
-            style={{ marginTop: '1rem' }}
-          >
-            {isRunning ? (
-              <>Hunting... <span className="terminal-dot dot-yellow"></span></>
-            ) : (
-              <><Play size={18} /> Start Hunt</>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Live Terminal */}
-      <div className="terminal-wrapper">
-        <div className="terminal-header">
-          <div className="terminal-dots">
-            <div className="terminal-dot dot-red"></div>
-            <div className="terminal-dot dot-yellow"></div>
-            <div className="terminal-dot dot-green"></div>
-          </div>
-          <Terminal size={14} /> Agent Live Terminal
-        </div>
-        <div className="terminal-content">
-          {logs.length === 0 ? (
-            <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              Waiting for mission control...
-            </div>
+      <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+        {/* Left Sidebar: History */}
+        <div className="glass-panel" style={{ width: '300px', flexShrink: 0, maxHeight: '80vh', overflowY: 'auto' }}>
+          <h2><History size={20} /> Past Hunts</h2>
+          {hunts.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No hunts recorded yet.</p>
           ) : (
-            logs.map((log, i) => (
-              <div 
-                key={i} 
-                className={`log-entry ${log.includes('ERROR') || log.includes('Failed') ? 'error' : log.includes('Successfully') || log.includes('Complete') ? 'success' : 'info'}`}
-              >
-                <span style={{opacity: 0.5}}>[{new Date().toLocaleTimeString()}]</span> {log}
-              </div>
-            ))
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {hunts.map(hunt => (
+                <div 
+                  key={hunt.id} 
+                  onClick={() => handleSelectHunt(hunt)}
+                  style={{ 
+                    padding: '1rem', 
+                    background: selectedHunt?.id === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)', 
+                    borderRadius: '8px', 
+                    cursor: 'pointer',
+                    border: `1px solid ${hunt.status === 'completed' ? 'var(--success-color)' : hunt.status === 'failed' ? 'var(--danger-color)' : 'var(--panel-border)'}`
+                  }}
+                >
+                  <div style={{ fontWeight: 'bold' }}>{hunt.repo_url.split('/').pop()}</div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Issues: {hunt.issues}</div>
+                  <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>{new Date(hunt.created_at).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
           )}
-          <div ref={logsEndRef} />
         </div>
-      </div>
 
-      {/* Approval Dashboard */}
-      {approvalBranch && (
-        <div className="glass-panel" style={{ border: '1px solid var(--accent-glow)', boxShadow: '0 0 20px rgba(99,102,241,0.2)', marginTop: '2rem' }}>
-          <h2><FileCheck size={20} /> Action Required: Approve PR Creation</h2>
-          <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-            The agent has finished implementing the fix on branch <strong style={{color: '#fff'}}>{approvalBranch}</strong> and is ready to open a Pull Request.
-          </p>
+        {/* Right Main Content */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
-          <div style={{
-            background: '#1a1b26',
-            borderRadius: '8px',
-            padding: '1rem',
-            maxHeight: '400px',
-            overflowY: 'auto',
-            marginBottom: '1rem',
-            border: '1px solid var(--panel-border)'
-          }}>
-            {renderDiff(approvalDiff)}
-          </div>
-
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button className="btn" style={{ background: 'var(--success-color)' }} onClick={() => handleApprove('approve')}>
-              Approve & Create PR
-            </button>
-            <button className="btn" style={{ background: 'var(--danger-color)' }} onClick={() => handleApprove('reject')}>
-              Reject
-            </button>
-          </div>
-        </div>
-      )}
-        </>
-      ) : activeTab === 'benchmark' ? (
-        <div className="grid-2">
-          {/* Configuration Panel - Shared */}
-          <div className="glass-panel">
-            <h2><Settings size={20} /> Configuration</h2>
-            
-            <div className="grid-2">
-              <div className="form-group">
-                <label>LLM Provider</label>
-                <select value={provider} onChange={e => setProvider(e.target.value)}>
-                  <option value="gemini">Google Gemini</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
-              </div>
+          <div className="grid-2">
+            {/* Configuration Panel */}
+            <div className="glass-panel">
+              <h2><Settings size={20} /> Configuration</h2>
               
+              <div className="grid-2">
+                <div className="form-group">
+                  <label>LLM Provider</label>
+                  <select value={provider} onChange={e => setProvider(e.target.value)}>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label>Model</label>
+                  <input 
+                    type="text" 
+                    value={model} 
+                    onChange={e => setModel(e.target.value)}
+                    placeholder="e.g. gemini-3.5-pro"
+                  />
+                </div>
+              </div>
+
               <div className="form-group">
-                <label>Model</label>
+                <label><Key size={14} style={{display:'inline', marginRight:4}} /> API Key</label>
+                <input 
+                  type="password" 
+                  value={apiKey} 
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder="Your LLM API Key"
+                />
+              </div>
+
+              <div className="form-group">
+                <label><GitBranch size={14} style={{display:'inline', marginRight:4}} /> GitHub Token</label>
+                <input 
+                  type="password" 
+                  value={githubToken} 
+                  onChange={e => setGithubToken(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxx"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Custom Base URL (Optional)</label>
                 <input 
                   type="text" 
-                  value={model} 
-                  onChange={e => setModel(e.target.value)}
-                  placeholder="e.g. gemini-3.5-pro"
+                  value={baseUrl} 
+                  onChange={e => setBaseUrl(e.target.value)}
+                  placeholder="e.g. http://localhost:11434/v1"
                 />
               </div>
             </div>
 
-            <div className="form-group">
-              <label><Key size={14} style={{display:'inline', marginRight:4}} /> API Key</label>
-              <input 
-                type="password" 
-                value={apiKey} 
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="Your LLM API Key"
-              />
-            </div>
-
-            <div className="form-group">
-              <label><GitBranch size={14} style={{display:'inline', marginRight:4}} /> GitHub Token</label>
-              <input 
-                type="password" 
-                value={githubToken} 
-                onChange={e => setGithubToken(e.target.value)}
-                placeholder="ghp_xxxxxxxxxxxx"
-              />
-            </div>
-
-            <div className="form-group">
-            <label>Custom Base URL (Optional)</label>
-            <input 
-              type="text" 
-              value={baseUrl} 
-              onChange={e => setBaseUrl(e.target.value)}
-              placeholder="e.g. http://localhost:11434/v1"
-            />
-          </div>
-          </div>
-
-          {/* Benchmark Panel */}
-          <div className="glass-panel">
-            <h2><List size={20} /> Benchmark Suite</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.875rem' }}>
-              Provide a JSON array of repositories and issues to test against. The system will enqueue all of them as separate hunts.
-            </p>
-            
-            <div className="form-group">
-              <label>JSON Dataset</label>
-              <textarea 
-                value={benchmarkInput} 
-                onChange={e => setBenchmarkInput(e.target.value)}
-                style={{ height: '200px', fontFamily: 'Fira Code, monospace', padding: '1rem' }}
-                placeholder='[{"repo_url": "...", "issues": [1, 2]}]'
-              />
-            </div>
-
-            <button 
-              className="btn" 
-              onClick={handleStartBenchmark} 
-              style={{ marginTop: '1rem' }}
-            >
-              <Play size={18} /> Queue Benchmark Batch
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid-2">
-          {/* History Sidebar */}
-          <div className="glass-panel" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-            <h2><List size={20} /> Past Hunts</h2>
-            {hunts.length === 0 ? (
-              <p style={{ color: 'var(--text-secondary)' }}>No hunts recorded yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {hunts.map(hunt => (
-                  <div 
-                    key={hunt.id} 
-                    onClick={() => handleSelectHunt(hunt)}
-                    style={{ 
-                      padding: '1rem', 
-                      background: selectedHunt?.id === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)', 
-                      borderRadius: '8px', 
-                      cursor: 'pointer',
-                      border: `1px solid ${hunt.status === 'completed' ? 'var(--success-color)' : hunt.status === 'failed' ? 'var(--danger-color)' : 'var(--panel-border)'}`
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold' }}>{hunt.repo_url.split('/').pop()}</div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Issues: {hunt.issues}</div>
-                    <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>{new Date(hunt.created_at).toLocaleString()}</div>
-                  </div>
-                ))}
+            {/* Target Panel */}
+            <div className="glass-panel">
+              <h2><Crosshair size={20} /> Target Mission</h2>
+              
+              <div className="form-group">
+                <label>Repository URL</label>
+                <input 
+                  type="text" 
+                  value={repoUrl} 
+                  onChange={e => setRepoUrl(e.target.value)}
+                  placeholder="https://github.com/chalk/chalk"
+                />
               </div>
-            )}
+
+              <div className="form-group">
+                <label>Issue Numbers or Links</label>
+                <input 
+                  type="text" 
+                  value={issueLinks} 
+                  onChange={e => setIssueLinks(e.target.value)}
+                  placeholder="669, 702 or https://github.com/chalk/chalk/issues/669"
+                />
+              </div>
+
+              <button 
+                className="btn" 
+                onClick={handleStartHunt} 
+                disabled={isRunning}
+                style={{ marginTop: '1rem' }}
+              >
+                {isRunning ? (
+                  <>Hunting... <span className="terminal-dot dot-yellow"></span></>
+                ) : (
+                  <><Play size={18} /> Start Hunt</>
+                )}
+              </button>
+            </div>
           </div>
-          
-          {/* History Details */}
-          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-            <h2>Details</h2>
-            {selectedHunt ? (
-              <div style={{ flex: 1, overflowY: 'auto' }}>
+
+          {/* Terminal / Details Area */}
+          {selectedHunt ? (
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              <button 
+                onClick={() => setSelectedHunt(null)}
+                style={{
+                  position: 'absolute', top: '1rem', right: '1rem',
+                  background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer'
+                }}
+              >
+                <X size={24} />
+              </button>
+              <h2>History Details: {selectedHunt.repo_url.split('/').pop()}</h2>
+              <div style={{ flex: 1, overflowY: 'auto', marginTop: '1rem' }}>
                 <h3>Report</h3>
                 <pre style={{ 
                   background: 'rgba(0,0,0,0.3)', 
@@ -627,7 +425,8 @@ function App() {
                   borderRadius: '8px', 
                   overflowX: 'auto',
                   whiteSpace: 'pre-wrap',
-                  marginBottom: '1rem'
+                  marginBottom: '1rem',
+                  fontFamily: 'inherit'
                 }}>
                   {selectedHunt.report_md || 'No report generated.'}
                 </pre>
@@ -639,20 +438,79 @@ function App() {
                   borderRadius: '8px', 
                   fontFamily: 'Fira Code, monospace',
                   fontSize: '0.875rem',
-                  color: '#a9b1d6'
+                  color: '#a9b1d6',
+                  maxHeight: '400px',
+                  overflowY: 'auto'
                 }}>
                   {selectedHuntLogs.map((log, i) => (
                     <div key={i} className="log-entry">{log}</div>
                   ))}
                 </div>
               </div>
-            ) : (
-              <p style={{ color: 'var(--text-secondary)' }}>Select a hunt to view details.</p>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          ) : (
+            <div className="terminal-wrapper">
+              <div className="terminal-header">
+                <div className="terminal-dots">
+                  <div className="terminal-dot dot-red"></div>
+                  <div className="terminal-dot dot-yellow"></div>
+                  <div className="terminal-dot dot-green"></div>
+                </div>
+                <Terminal size={14} /> Agent Live Terminal
+              </div>
+              <div className="terminal-content">
+                {logs.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    Waiting for mission control...
+                  </div>
+                ) : (
+                  logs.map((log, i) => (
+                    <div 
+                      key={i} 
+                      className={`log-entry ${log.includes('ERROR') || log.includes('Failed') ? 'error' : log.includes('Successfully') || log.includes('Complete') ? 'success' : 'info'}`}
+                    >
+                      <span style={{opacity: 0.5}}>[{new Date().toLocaleTimeString()}]</span> {log}
+                    </div>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            </div>
+          )}
 
+          {/* Approval Dashboard */}
+          {approvalBranch && (
+            <div className="glass-panel" style={{ border: '1px solid var(--accent-glow)', boxShadow: '0 0 20px rgba(99,102,241,0.2)' }}>
+              <h2><FileCheck size={20} /> Action Required: Approve PR Creation</h2>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                The agent has finished implementing the fix on branch <strong style={{color: '#fff'}}>{approvalBranch}</strong> and is ready to open a Pull Request.
+              </p>
+              
+              <div style={{
+                background: '#1a1b26',
+                borderRadius: '8px',
+                padding: '1rem',
+                maxHeight: '400px',
+                overflowY: 'auto',
+                marginBottom: '1rem',
+                border: '1px solid var(--panel-border)'
+              }}>
+                {renderDiff(approvalDiff)}
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button className="btn" style={{ background: 'var(--success-color)' }} onClick={() => handleApprove('approve')}>
+                  Approve & Create PR
+                </button>
+                <button className="btn" style={{ background: 'var(--danger-color)' }} onClick={() => handleApprove('reject')}>
+                  Reject
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
     </div>
   );
 }
