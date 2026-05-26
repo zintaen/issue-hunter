@@ -186,13 +186,13 @@ function App() {
         
         buffer += decoder.decode(value, { stream: true });
         
-        let boundary = buffer.indexOf('\\n\\n');
+        let boundary = buffer.indexOf('\n\n');
         while (boundary !== -1) {
           const chunk = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
           
           if (chunk.startsWith('data: ')) {
-            let msg = chunk.slice(6).replace(/\\|\\|n\\|\\|/g, '\\n');
+            let msg = chunk.slice(6).replace(/__NEWLINE__/g, '\n');
             if (msg.startsWith('__APPROVAL_REQUIRED__:')) {
               fetchPendingApprovals();
             } else {
@@ -200,7 +200,7 @@ function App() {
             }
           }
           
-          boundary = buffer.indexOf('\\n\\n');
+          boundary = buffer.indexOf('\n\n');
         }
       }
       setIsRunning(false);

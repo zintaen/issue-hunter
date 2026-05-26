@@ -145,31 +145,31 @@ async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
             )
         )
         
-        yield f"data: Workflow queued. Hunt ID: {hunt_id}\\n\\n"
+        yield f"data: Workflow queued. Hunt ID: {hunt_id}\n\n"
         
         while not workflow_task.done():
             try:
                 msg = await asyncio.wait_for(log_queue.get(), timeout=1.0)
                 # Replace newlines so SSE doesn't break
-                safe_msg = msg.replace('\\n', '||n||')
-                yield f"data: {safe_msg}\\n\\n"
+                safe_msg = msg.replace('\n', '__NEWLINE__')
+                yield f"data: {safe_msg}\n\n"
             except asyncio.TimeoutError:
                 # Keep connection alive
-                yield ": keepalive\\n\\n"
+                yield ": keepalive\n\n"
                 
         # Drain remaining logs
         while not log_queue.empty():
             msg = log_queue.get_nowait()
-            safe_msg = msg.replace('\\n', '||n||')
-            yield f"data: {safe_msg}\\n\\n"
+            safe_msg = msg.replace('\n', '__NEWLINE__')
+            yield f"data: {safe_msg}\n\n"
             
         try:
             report_md = workflow_task.result()
             update_hunt_status(hunt_id, "completed", report_md=report_md)
-            yield f"data: Workflow completed successfully.\\n\\n"
+            yield f"data: Workflow completed successfully.\n\n"
         except Exception as e:
             update_hunt_status(hunt_id, "failed")
-            yield f"data: Workflow failed: {str(e)}\\n\\n"
+            yield f"data: Workflow failed: {str(e)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
