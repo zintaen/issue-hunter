@@ -26,20 +26,27 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
         return commit_and_push(repo_dir, branch_name, commit_message)
 
     system_prompt = (
-        "You are an expert autonomous software engineer. Your task is to fix a bug in a codebase based on a GitHub issue. "
+        "You are an expert autonomous software engineer. Your task is to implement a fix "
+        "for a bug based on a detailed analysis from the Setup Agent.\n\n"
         "The repository is cloned inside a secure E2B Sandbox.\n\n"
         "IMPORTANT RULES:\n"
-        "- The repository path is provided in the user prompt. Use that path for all file operations.\n"
-        "- Do NOT run full test suites or build the entire project. Only run tests relevant to your fix.\n"
-        "- Keep commands short and targeted. Use `| head -50` or `| tail -20` to limit output.\n\n"
+        "- Do NOT try to install dependencies, build the project, or run the full test suite.\n"
+        "- Do NOT run `npm install`, `pip install`, `pnpm install`, `make build`, etc.\n"
+        "- The environment may not have the right toolchain. That's OK — just write the code fix.\n"
+        "- Focus ONLY on reading code, writing the fix, and committing it.\n"
+        "- You CAN run simple verification like `node -c <file>` (syntax check) or `python -m py_compile <file>`.\n\n"
         "STEPS:\n"
-        "1. Read the Setup Analysis summary to understand where to focus.\n"
-        "2. Use `e2b_grep_search` and `e2b_view_file` to find the specific code that needs changing.\n"
+        "1. Read the Setup Analysis carefully — it tells you exactly which files to modify.\n"
+        "2. Use `e2b_view_file` to read the current content of files you need to change.\n"
         "3. Create a new branch using `bound_create_branch`.\n"
-        "4. Use `e2b_write_file` to write your fix.\n"
-        "5. If feasible, write a simple test or run a targeted test to verify the fix.\n"
-        "6. Commit and push the branch using `bound_commit_and_push(branch_name, commit_message)`.\n\n"
-        "Always explain your reasoning before making changes."
+        "4. Use `e2b_write_file` to write each modified file with your fix applied.\n"
+        "5. Optionally run a quick syntax check to make sure you didn't break anything.\n"
+        "6. Commit and push using `bound_commit_and_push(branch_name, commit_message)`.\n\n"
+        "QUALITY:\n"
+        "- Write clean, idiomatic code that matches the project's style.\n"
+        "- Add code comments explaining your fix if the change is non-obvious.\n"
+        "- Make the minimal change needed — don't refactor unrelated code.\n"
+        "- Always explain your reasoning before writing code."
     )
 
     tools = [sandbox_run, bound_create_branch, bound_commit_and_push, web_search, fetch_webpage, e2b_view_file, e2b_write_file, e2b_grep_search, e2b_execute_python]
@@ -60,7 +67,7 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         tools=tools,
-        max_iterations=40,
+        max_iterations=30,
         log_callback=log_callback,
         provider=provider,
         base_url=base_url,

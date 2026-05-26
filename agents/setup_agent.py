@@ -6,7 +6,7 @@ from agents.tools import (
 )
 
 async def run_setup_agent(repo_dir: str, issue_details: str, api_key: str, model: str = None, log_callback=None, provider: str = "gemini", base_url: str = None) -> str:
-    """Runs the Setup Agent to analyze the repository structure and map it to the issue."""
+    """Runs the Setup Agent to deeply scan the codebase and produce a fix plan."""
     async def log(msg: str):
         if log_callback:
             if asyncio.iscoroutinefunction(log_callback):
@@ -17,29 +17,42 @@ async def run_setup_agent(repo_dir: str, issue_details: str, api_key: str, model
             print(msg)
 
     system_prompt = (
-        "You are an expert software engineer. Your ONLY goal is to quickly analyze "
-        "a repository and produce a concise summary that helps a Solver Agent fix a specific issue.\n\n"
+        "You are an expert software engineer. Your goal is to deeply scan a codebase "
+        "and produce a detailed analysis that enables a Solver Agent to write the correct fix.\n\n"
         "The repository is cloned at the path provided in the user prompt.\n\n"
         "RULES:\n"
-        "- Do NOT install dependencies, build the project, or run tests. That is the Solver Agent's job.\n"
+        "- Do NOT install dependencies, build the project, or run any tests.\n"
         "- Do NOT run `npm install`, `pip install`, `pnpm install`, `make`, or any build/test command.\n"
-        "- Keep your exploration focused: max 10-12 tool calls.\n\n"
+        "- ONLY use `sandbox_run` for `ls`, `find`, `cat`, `head`, `tail`, `wc` — read-only commands.\n"
+        "- Focus on understanding the code deeply, not on setting up the environment.\n\n"
         "STEPS:\n"
-        "1. Run `ls` on the repo root to see the top-level structure.\n"
-        "2. Read README.md (first 200 lines) to understand what the project is.\n"
-        "3. Identify the project type: monorepo (look for workspaces in package.json, pnpm-workspace.yaml, lerna.json) or single package.\n"
-        "4. For a monorepo, list the packages/modules. Identify which package is most relevant to the issue.\n"
-        "5. Use `e2b_grep_search` to find files/code related to keywords from the issue.\n"
-        "6. Read 1-2 key files that are most relevant to the issue.\n\n"
+        "1. `ls` the repo root to see top-level structure.\n"
+        "2. Read README.md or CONTRIBUTING.md (use `sandbox_run('head -100 <path>')`) for project overview.\n"
+        "3. Identify if it's a monorepo. If so, list packages and identify the relevant one for the issue.\n"
+        "4. Use `e2b_grep_search` with keywords from the issue to find the exact files and functions involved.\n"
+        "5. Read the relevant source files thoroughly using `e2b_view_file`.\n"
+        "6. Trace the code path: find where the bug originates, what functions call it, what the expected behavior should be.\n"
+        "7. Read any related test files to understand expected behavior.\n\n"
         "OUTPUT FORMAT (you MUST follow this exactly):\n"
         "```\n"
         "PROJECT: <name>\n"
         "TYPE: <monorepo|single-package>\n"
         "LANGUAGES: <comma-separated>\n"
-        "RELEVANT_PACKAGE: <path to the most relevant package/directory for the issue>\n"
+        "RELEVANT_PACKAGE: <path to the most relevant package/directory>\n"
         "BUILD_SYSTEM: <npm|pnpm|yarn|pip|poetry|make|cargo|etc>\n"
-        "KEY_FILES: <comma-separated list of files most relevant to the issue>\n"
-        "ANALYSIS: <2-3 sentences about what needs to change to fix the issue>\n"
+        "\n"
+        "ROOT_CAUSE: <detailed explanation of what causes the bug>\n"
+        "FIX_STRATEGY: <step-by-step description of what code changes are needed>\n"
+        "\n"
+        "FILES_TO_MODIFY:\n"
+        "- <full/path/to/file1.ts>: <what to change and why>\n"
+        "- <full/path/to/file2.ts>: <what to change and why>\n"
+        "\n"
+        "FILES_FOR_REFERENCE (read-only context):\n"
+        "- <full/path/to/related_file.ts>: <why it's relevant>\n"
+        "\n"
+        "CODE_SNIPPETS:\n"
+        "<paste the exact current code that needs to change, with line context>\n"
         "```"
     )
 
@@ -50,9 +63,9 @@ async def run_setup_agent(repo_dir: str, issue_details: str, api_key: str, model
         client=None,
         model=model,
         system_prompt=system_prompt,
-        user_prompt=f"Analyze this repository (cloned at {repo_dir}) in the context of this issue:\n\n{issue_details}\n\nProduce a focused analysis summary.",
+        user_prompt=f"Analyze this repository (cloned at {repo_dir}) in the context of this issue:\n\n{issue_details}\n\nScan the codebase deeply. Find the root cause and produce a detailed fix plan.",
         tools=tools,
-        max_iterations=15,
+        max_iterations=25,
         log_callback=log_callback,
         provider=provider,
         base_url=base_url,
