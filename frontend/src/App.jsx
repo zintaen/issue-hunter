@@ -456,7 +456,23 @@ function App() {
                   <div className="terminal-dot dot-yellow"></div>
                   <div className="terminal-dot dot-green"></div>
                 </div>
-                <Terminal size={14} /> Agent Live Terminal
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Terminal size={14} /> Agent Live Terminal
+                </div>
+                <button 
+                  onClick={() => setLogs([])}
+                  style={{
+                    background: 'transparent', 
+                    border: '1px solid var(--panel-border)', 
+                    color: 'var(--text-secondary)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Clear
+                </button>
               </div>
               <div className="terminal-content">
                 {logs.length === 0 ? (
