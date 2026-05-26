@@ -67,7 +67,7 @@ def get_litellm_kwargs(api_key: str, provider: str = "gemini", base_url: str = N
     }
     
     if base_url:
-        kwargs["api_base"] = base_url
+        kwargs["api_base"] = base_url.strip().rstrip('/')
     
     return kwargs
 

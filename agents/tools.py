@@ -20,7 +20,7 @@ def start_sandbox(repo_dir: str) -> str:
     if not api_key:
         print("WARNING: E2B_API_KEY not found. Operations requiring execution will fail.")
         return "Failed"
-    active_sandbox = Sandbox.create()
+    active_sandbox = Sandbox.create(timeout=3600)
     active_sandbox.commands.run("sudo apt-get update && sudo apt-get install -y git")
     return "E2B Cloud Sandbox started successfully."
 
@@ -61,8 +61,14 @@ def sandbox_run(command: str) -> str:
     global active_sandbox, active_container_dir
     if not active_sandbox:
         return "Error: No active E2B sandbox."
-    res = active_sandbox.commands.run(command, cwd=active_container_dir)
-    return f"Exit Code: {res.exit_code}\nOutput:\n{res.stdout}\n{res.stderr}"
+    try:
+        res = active_sandbox.commands.run(command, cwd=active_container_dir)
+        return f"Exit Code: {res.exit_code}\nOutput:\n{res.stdout}\n{res.stderr}"
+    except Exception as e:
+        # e2b raises CommandExitException for non-zero exits
+        if hasattr(e, 'exit_code') and hasattr(e, 'stdout') and hasattr(e, 'stderr'):
+            return f"Exit Code: {getattr(e, 'exit_code')}\nOutput:\n{getattr(e, 'stdout', '')}\n{getattr(e, 'stderr', '')}"
+        return f"Exception: {str(e)}"
 
 def e2b_execute_python(code: str) -> str:
     """Execute python code in a Jupyter notebook cell and return result."""
