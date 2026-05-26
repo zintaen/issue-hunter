@@ -57,12 +57,12 @@ def fork_and_clone_repo(repo_full_name: str, target_dir: str) -> str:
     return f"Cloned into E2B: {res.stdout}"
 
 def sandbox_run(command: str) -> str:
-    """Run a command inside the E2B sandbox."""
+    """Run a command inside the E2B sandbox. Commands have a 120-second timeout."""
     global active_sandbox, active_container_dir
     if not active_sandbox:
         return "Error: No active E2B sandbox."
     try:
-        res = active_sandbox.commands.run(command, cwd=active_container_dir)
+        res = active_sandbox.commands.run(command, cwd=active_container_dir, timeout=120)
         return f"Exit Code: {res.exit_code}\nOutput:\n{res.stdout}\n{res.stderr}"
     except Exception as e:
         # e2b raises CommandExitException for non-zero exits

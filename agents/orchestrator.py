@@ -70,15 +70,25 @@ async def run_orchestrator(
         # Fork and Clone inside E2B
         fork_and_clone_repo(repo_full_name, clone_dir)
         
+        # Fetch issue details early so setup agent can focus
+        all_issue_details = {}
+        for issue_num in issue_numbers:
+            all_issue_details[issue_num] = git_provider.fetch_issue_details(repo_full_name, issue_num)
+        
+        # Combine issue details for setup context
+        combined_issue_context = "\n\n---\n\n".join([
+            f"Issue #{num}:\n{details}" for num, details in all_issue_details.items()
+        ])
+        
         await log("\n--- Phase 1: Setup & Analysis ---")
-        setup_summary = await run_setup_agent(clone_dir, api_key, model, log_callback, provider=provider, base_url=base_url)
+        setup_summary = await run_setup_agent(clone_dir, combined_issue_context, api_key, model, log_callback, provider=provider, base_url=base_url)
         await log("Setup Phase Complete.\n")
         
         await log(f"\n--- Phase 2: Processing {len(issue_numbers)} Issues ---")
         for issue_num in issue_numbers:
             await log_with_db(f"\n--- Phase 2: Processing Issue #{issue_num} ---")
             
-            issue_details = git_provider.fetch_issue_details(repo_full_name, issue_num)
+            issue_details = all_issue_details[issue_num]
             await log_with_db(f"Fetched issue details for #{issue_num}.")
             
             branch_name = f"fix-issue-{issue_num}"
@@ -90,7 +100,7 @@ async def run_orchestrator(
             
             for attempt in range(max_retries):
                 await log(f"\n[ATTEMPT {attempt + 1}/{max_retries}] Running Solver Agent...")
-                solver_result = await run_solver_agent(clone_dir, issue_details, branch_name, api_key, model, previous_feedback, log_callback, provider=provider, base_url=base_url)
+                solver_result = await run_solver_agent(clone_dir, issue_details, branch_name, setup_summary, api_key, model, previous_feedback, log_callback, provider=provider, base_url=base_url)
                 
                 if not solver_result:
                     await log("Solver Agent failed to complete its execution.")
