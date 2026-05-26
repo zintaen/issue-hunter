@@ -105,7 +105,36 @@ def get_hunts():
     if supabase:
         try:
             response = supabase.table('hunts').select("id, repo_url, issues, provider, model, status, report_md, branch_name, created_at, updated_at").order("created_at", desc=True).execute()
-            return response.data
+            hunts = response.data
+            
+            # Auto-cleanup stale running hunts (e.g. killed by Vercel timeout)
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            
+            for h in hunts:
+                if h.get('status') == 'running' and h.get('created_at'):
+                    try:
+                        ca_str = h['created_at']
+                        if ca_str.endswith('Z'):
+                            ca_str = ca_str[:-1] + '+00:00'
+                        ca = datetime.fromisoformat(ca_str)
+                        if ca.tzinfo is None:
+                            ca = ca.replace(tzinfo=timezone.utc)
+                            
+                        # If running for more than 15 minutes, mark as failed
+                        if (now - ca).total_seconds() > 900:
+                            h['status'] = 'failed'
+                            if not h.get('report_md'):
+                                h['report_md'] = "Process timed out and was killed by the server environment."
+                            
+                            supabase.table('hunts').update({
+                                "status": "failed", 
+                                "report_md": h.get('report_md')
+                            }).eq("id", h['id']).execute()
+                    except Exception as e:
+                        print(f"Error parsing date or updating stale hunt {h.get('id')}: {e}")
+            
+            return hunts
         except Exception as e:
             print("Failed to fetch hunts:", e)
     return []
