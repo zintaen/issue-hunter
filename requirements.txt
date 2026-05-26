@@ -1,5 +1,6 @@
 # Core
 openai>=1.30.0
+litellm
 PyGithub
 e2b_code_interpreter
 python-dotenv

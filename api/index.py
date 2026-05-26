@@ -15,7 +15,7 @@ import traceback
 import_error = None
 try:
     from agents.orchestrator import run_orchestrator
-    from backend.db import init_db, create_hunt, insert_log, update_hunt_status, get_hunts, get_hunt_logs, get_hunt, get_pending_approvals
+    from backend.db import init_db, create_hunt, get_or_create_hunt, insert_log, update_hunt_status, get_hunts, get_hunt_logs, get_hunt, get_pending_approvals
 except Exception as e:
     import_error = traceback.format_exc()
 
@@ -102,7 +102,7 @@ async def approve_action(request: ApproveRequest, token: str = Depends(verify_to
 
 @app.post("/api/hunt")
 async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
-    hunt_id = create_hunt(
+    hunt_id = get_or_create_hunt(
         repo_url=request.repo_url,
         issues=request.issues,
         provider=request.provider,
@@ -113,6 +113,13 @@ async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
     async def event_generator():
         log_queue = asyncio.Queue()
         
+        # Pre-populate with existing logs if any
+        existing_logs = get_hunt_logs(hunt_id)
+        if existing_logs:
+            for msg in existing_logs:
+                # We don't put it in the queue, we just yield it immediately in the main stream loop
+                pass 
+            
         async def log_with_db(msg: str):
             insert_log(hunt_id, msg)
             await log_queue.put(msg)
@@ -146,6 +153,12 @@ async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
         )
         
         yield f"data: Workflow queued. Hunt ID: {hunt_id}\n\n"
+        
+        if existing_logs:
+            yield f"data: --- Resuming previous hunt logs ---\n\n"
+            for msg in existing_logs:
+                safe_msg = msg.replace('\n', '__NEWLINE__')
+                yield f"data: {safe_msg}\n\n"
         
         while not workflow_task.done():
             try:

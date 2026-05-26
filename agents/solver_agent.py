@@ -41,21 +41,30 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
 
     client = get_client(api_key, provider, base_url)
     tools = [sandbox_run, bound_create_branch, bound_commit_and_push, web_search, fetch_webpage, e2b_view_file, e2b_write_file, e2b_grep_search, e2b_execute_python]
+    user_prompt = f"Fix the following issue:\n\n{issue_details}\n\nBranch to create: {branch_name}"
+    if previous_feedback:
+        user_prompt += f"\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED BY THE REVIEWER. Here is the feedback:\n{previous_feedback}\nPlease try again and fix these issues."
 
     await log(f"\n--- Starting Solver Agent for branch {branch_name} ---")
     
-    prompt = f"Fix the following issue:\n\n{issue_details}\n\nBranch to create: {branch_name}"
-    if previous_feedback:
-        prompt += f"\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED BY THE REVIEWER. Here is the feedback:\n{previous_feedback}\nPlease try again and fix these issues."
-    prompt += "\n\nRemember to create the branch first, implement the fix, test it via `sandbox_run`, and finally commit and push."
-
     result = await run_agent_loop(
-        client=client,
+        client=None,
         model=model,
         system_prompt=system_prompt,
-        user_prompt=prompt,
+        user_prompt=user_prompt,
         tools=tools,
         log_callback=log_callback,
+        provider=provider,
+        base_url=base_url,
+        api_key=api_key
     )
+    
     await log("Solver Agent finished.")
-    return True, result
+    
+    # Check if branch has changes (using sandbox_run since we are in sandbox)
+    diff = sandbox_run("git status --porcelain")
+    if diff.strip():
+        commit_and_push(repo_dir, branch_name, f"Fix issue {issue_details['number']}: {issue_details['title']}")
+        return True, result
+    else:
+        return False, result

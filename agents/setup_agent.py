@@ -32,17 +32,19 @@ async def run_setup_agent(repo_dir: str, api_key: str, model: str = None, log_ca
         "Output a final summary of what the project is, the main technologies used, and the commands required to set it up."
     )
 
-    client = get_client(api_key, provider, base_url)
     tools = [sandbox_run, web_search, fetch_webpage, e2b_view_file, e2b_write_file, e2b_grep_search]
 
     await log("\n--- Starting Setup & Analysis Agent ---")
     result = await run_agent_loop(
-        client=client,
+        client=None,
         model=model,
         system_prompt=system_prompt,
         user_prompt="Analyze this repository, install its dependencies, and verify that it can be built or its tests can be run. Report your findings.",
         tools=tools,
         log_callback=log_callback,
+        provider=provider,
+        base_url=base_url,
+        api_key=api_key
     )
     await log(result)
     return result

@@ -1,15 +1,13 @@
 """
 Provider-agnostic LLM client with tool-calling agent loop.
-Uses the OpenAI SDK as a universal client since most providers
-(OpenAI, Anthropic proxies, Gemini, custom endpoints) support the
-OpenAI-compatible chat completions API.
+Uses litellm to seamlessly proxy any provider (OpenAI, Anthropic, Gemini, etc).
 """
 import os
 import json
 import inspect
 import asyncio
 from typing import Callable
-from openai import AsyncOpenAI
+from litellm import acompletion
 
 # --- Provider base URL mapping ---
 PROVIDER_DEFAULTS = {
@@ -17,19 +15,6 @@ PROVIDER_DEFAULTS = {
     "anthropic": "https://api.anthropic.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
 }
-
-DEFAULT_MODELS = {
-    "openai": "gpt-4o",
-    "anthropic": "claude-sonnet-4-20250514",
-    "gemini": "gemini-2.5-flash",
-}
-
-
-def get_client(api_key: str, provider: str = "gemini", base_url: str = None) -> AsyncOpenAI:
-    """Create an AsyncOpenAI client configured for any provider."""
-    effective_base_url = base_url or PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
-    return AsyncOpenAI(api_key=api_key, base_url=effective_base_url)
-
 
 def _python_type_to_json_schema(annotation) -> dict:
     """Convert Python type annotations to JSON Schema types."""
@@ -43,7 +28,6 @@ def _python_type_to_json_schema(annotation) -> dict:
         return {"type": "boolean"}
     else:
         return {"type": "string"}
-
 
 def function_to_tool_schema(func: Callable) -> dict:
     """Convert a Python function into an OpenAI-compatible tool schema."""
@@ -74,23 +58,37 @@ def function_to_tool_schema(func: Callable) -> dict:
         }
     }
 
+def get_litellm_kwargs(api_key: str, provider: str = "gemini", base_url: str = None) -> dict:
+    """Get the correct litellm arguments depending on provider."""
+    # Litellm model string needs provider/ prefix for some providers
+    # The agent expects OpenAI API structure. Litellm handles the translation natively.
+    kwargs = {
+        "api_key": api_key,
+    }
+    
+    if base_url:
+        kwargs["api_base"] = base_url
+    
+    return kwargs
 
 async def run_agent_loop(
-    client: AsyncOpenAI,
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    tools: list[Callable],
+    client=None, # kept for signature compatibility but unused
+    model: str = "gpt-4o",
+    system_prompt: str = "",
+    user_prompt: str = "",
+    tools: list[Callable] = None,
     max_iterations: int = 30,
     log_callback=None,
+    provider: str = "gemini",
+    base_url: str = None,
+    api_key: str = None
 ) -> str:
     """
-    Run a tool-calling agent loop.
-    
-    Sends the user prompt to the LLM with tool schemas. When the LLM
-    returns tool_calls, executes them and feeds results back. Repeats
-    until the LLM returns a final text response (no tool calls).
+    Run a tool-calling agent loop using litellm.
     """
+    if tools is None:
+        tools = []
+        
     async def log(msg: str):
         if log_callback:
             if asyncio.iscoroutinefunction(log_callback):
@@ -107,13 +105,24 @@ async def run_agent_loop(
         {"role": "user", "content": user_prompt},
     ]
     
+    litellm_kwargs = get_litellm_kwargs(api_key, provider, base_url)
+    
+    # Prefix model with provider if needed for litellm
+    if provider == "anthropic" and not model.startswith("anthropic/"):
+        model_name = f"anthropic/{model}"
+    elif provider == "gemini" and not model.startswith("gemini/"):
+        model_name = f"gemini/{model}"
+    else:
+        model_name = model
+    
     for iteration in range(max_iterations):
         try:
-            response = await client.chat.completions.create(
-                model=model,
+            response = await acompletion(
+                model=model_name,
                 messages=messages,
                 tools=tool_schemas if tool_schemas else None,
                 tool_choice="auto" if tool_schemas else None,
+                **litellm_kwargs
             )
         except Exception as e:
             error_msg = f"LLM API call failed: {e}"

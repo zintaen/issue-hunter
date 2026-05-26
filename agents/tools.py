@@ -114,8 +114,11 @@ def commit_and_push(repo_dir: str, branch_name: str, commit_message: str) -> str
 def get_git_diff(repo_dir: str, branch_name: str) -> str:
     """Get the git diff between the branch and origin/main."""
     res = sandbox_run(f"git diff origin/main...{branch_name}")
-    if not res or "fatal" in res:
+    if not res or "fatal" in res or "error" in res.lower() or "unknown revision" in res:
         res = sandbox_run(f"git diff origin/master...{branch_name}")
+        
+    if "fatal" in res or "error" in res.lower() or "unknown revision" in res:
+        return ""
     return res
 
 def web_search(query: str, num_results: int = 5) -> str:

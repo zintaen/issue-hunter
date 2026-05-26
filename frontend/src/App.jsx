@@ -14,8 +14,8 @@ function App() {
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('base_url') || '');
 
   // Target State
-  const [repoUrl, setRepoUrl] = useState('');
-  const [issueLinks, setIssueLinks] = useState('');
+  const [repoUrl, setRepoUrl] = useState(localStorage.getItem('repo_url') || '');
+  const [issueLinks, setIssueLinks] = useState(localStorage.getItem('issue_links') || '');
 
   // Execution State
   const [isRunning, setIsRunning] = useState(false);
@@ -71,7 +71,9 @@ function App() {
     localStorage.setItem('llm_api_key', apiKey);
     localStorage.setItem('github_token', githubToken);
     localStorage.setItem('base_url', baseUrl);
-  }, [provider, model, apiKey, githubToken, baseUrl]);
+    localStorage.setItem('repo_url', repoUrl);
+    localStorage.setItem('issue_links', issueLinks);
+  }, [provider, model, apiKey, githubToken, baseUrl, repoUrl, issueLinks]);
 
   const handleApprove = async (action) => {
     if (!approvalHuntId) return;
@@ -284,23 +286,59 @@ function App() {
             <p style={{ color: 'var(--text-secondary)' }}>No hunts recorded yet.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {hunts.map(hunt => (
-                <div 
-                  key={hunt.id} 
-                  onClick={() => handleSelectHunt(hunt)}
-                  style={{ 
-                    padding: '1rem', 
-                    background: selectedHunt?.id === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)', 
-                    borderRadius: '8px', 
-                    cursor: 'pointer',
-                    border: `1px solid ${hunt.status === 'completed' ? 'var(--success-color)' : hunt.status === 'failed' ? 'var(--danger-color)' : 'var(--panel-border)'}`
-                  }}
-                >
-                  <div style={{ fontWeight: 'bold' }}>{hunt.repo_url.split('/').pop()}</div>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Issues: {hunt.issues}</div>
-                  <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>{new Date(hunt.created_at).toLocaleString()}</div>
-                </div>
-              ))}
+              {(() => {
+                // Filter by Target Mission inputs
+                const filteredHunts = hunts.filter(hunt => {
+                  if (repoUrl && !hunt.repo_url.toLowerCase().includes(repoUrl.toLowerCase())) return false;
+                  if (issueLinks) {
+                    const issueQuery = issueLinks.split('/').pop().replace('#', '');
+                    if (!hunt.issues.includes(parseInt(issueQuery)) && !hunt.issues.includes(issueQuery)) return false;
+                  }
+                  return true;
+                });
+                
+                // Group by repo
+                const grouped = {};
+                filteredHunts.forEach(hunt => {
+                  if (!grouped[hunt.repo_url]) grouped[hunt.repo_url] = [];
+                  grouped[hunt.repo_url].push(hunt);
+                });
+                
+                if (Object.keys(grouped).length === 0) {
+                  return <p style={{ color: 'var(--text-secondary)' }}>No matches found for your filter.</p>;
+                }
+                
+                return Object.entries(grouped).map(([rUrl, rHunts]) => (
+                  <div key={rUrl} style={{ marginBottom: '1rem' }}>
+                    <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                      {rUrl.split('/').pop()}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {rHunts.map(hunt => (
+                        <div 
+                          key={hunt.id} 
+                          onClick={() => {
+                            handleSelectHunt(hunt);
+                            setRepoUrl(hunt.repo_url);
+                            setIssueLinks(hunt.issues.join(', '));
+                          }}
+                          style={{ 
+                            padding: '0.75rem', 
+                            background: selectedHunt?.id === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)', 
+                            borderRadius: '8px', 
+                            cursor: 'pointer',
+                            border: `1px solid ${hunt.status === 'completed' ? 'var(--success-color)' : hunt.status === 'failed' ? 'var(--danger-color)' : 'var(--panel-border)'}`
+                          }}
+                        >
+                          <div style={{ fontSize: '0.875rem' }}>Issue: #{hunt.issues}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{new Date(hunt.created_at).toLocaleString()}</div>
+                          <div style={{ fontSize: '0.75rem', color: hunt.status === 'running' ? 'var(--warning-color)' : 'var(--text-secondary)', marginTop: '0.25rem' }}>Status: {hunt.status}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </div>

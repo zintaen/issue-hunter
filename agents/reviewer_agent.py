@@ -34,17 +34,18 @@ You must output exactly one of two decisions at the end of your response:
 [REJECTED] - If the code has issues. You must provide detailed feedback above this tag for the Solver Agent to fix it.
 """
 
-    client = get_client(api_key, provider, base_url)
-    prompt = f"Issue Details:\n{issue_details}\n\nGit Diff:\n{diff_output}\n\nPlease review these changes."
-
-    await log("[REVIEWER AGENT] Analyzing diff...")
+    tools = [] # Reviewer primarily analyzes text, no extra tools needed
+    
     review_text = await run_agent_loop(
-        client=client,
+        client=None,
         model=model,
         system_prompt=system_prompt,
-        user_prompt=prompt,
-        tools=[sandbox_run, web_search, fetch_webpage, e2b_execute_python],
+        user_prompt=f"Issue Details:\n{issue_details}\n\nGit Diff:\n{diff_output}\n\nPlease review these changes.",
+        tools=tools,
         log_callback=log_callback,
+        provider=provider,
+        base_url=base_url,
+        api_key=api_key
     )
     await log(f"[REVIEWER AGENT] Feedback:\n{review_text}")
 

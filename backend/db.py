@@ -36,6 +36,29 @@ def create_hunt(repo_url: str, issues: list, provider: str, model: str) -> str:
         }).execute()
     return hunt_id
 
+def get_or_create_hunt(repo_url: str, issues: list, provider: str, model: str) -> str:
+    supabase = get_supabase()
+    if supabase:
+        try:
+            # Check existing
+            response = supabase.table('hunts').select("id, issues").eq("repo_url", repo_url).execute()
+            for row in response.data:
+                # Ensure it's the exact same array of issues
+                if row.get('issues') == issues:
+                    # Update status to running
+                    supabase.table('hunts').update({
+                        "status": "running",
+                        "provider": provider,
+                        "model": model,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("id", row['id']).execute()
+                    return row['id']
+        except Exception as e:
+            print("Failed to get_or_create_hunt:", e)
+            
+    # If not found or error, create new
+    return create_hunt(repo_url, issues, provider, model)
+
 def insert_log(hunt_id: str, log_text: str):
     supabase = get_supabase()
     if supabase:
