@@ -194,6 +194,20 @@ def list_hunts(token: str = Depends(verify_token)):
 def fetch_hunt_logs(hunt_id: str, token: str = Depends(verify_token)):
     return get_hunt_logs(hunt_id)
 
+@app.delete("/api/hunts/{hunt_id}")
+def delete_hunt_endpoint(hunt_id: str, token: str = Depends(verify_token)):
+    from backend.db import delete_hunt
+    from agents.tools import cleanup_sandbox
+    # Kill sandbox if hunt was running
+    hunt = get_hunt(hunt_id)
+    if hunt and hunt.get('status') == 'running':
+        try:
+            cleanup_sandbox()
+        except Exception:
+            pass
+    delete_hunt(hunt_id)
+    return {"status": "deleted"}
+
 @app.post("/api/webhook/github")
 async def github_webhook(request: Request):
     # Webhooks on Vercel Serverless will timeout after 10s if we run the workflow synchronously.

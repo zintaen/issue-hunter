@@ -1,6 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, History, List, Lock, X } from 'lucide-react';
+import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, List, Lock, X, Trash2, Loader, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import './index.css';
+
+// Parse issue link to extract repo URL and issue number
+function parseIssueLink(link) {
+  const trimmed = link.trim();
+  // Full URL: https://github.com/owner/repo/issues/123
+  const match = trimmed.match(/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)/);
+  if (match) {
+    return { repoUrl: `https://github.com/${match[1]}`, issueNum: parseInt(match[2]) };
+  }
+  return null;
+}
+
+// Status badge component
+function StatusBadge({ status }) {
+  const config = {
+    running: { icon: <Loader size={12} className="spin-icon" />, color: '#e0af68', label: 'Running' },
+    completed: { icon: <CheckCircle size={12} />, color: '#9ece6a', label: 'Completed' },
+    failed: { icon: <XCircle size={12} />, color: '#f7768e', label: 'Failed' },
+    pending_approval: { icon: <AlertCircle size={12} />, color: '#7aa2f7', label: 'Needs Approval' },
+  };
+  const c = config[status] || { icon: <Clock size={12} />, color: '#565f89', label: status };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: c.color, fontWeight: 600 }}>
+      {c.icon} {c.label}
+    </span>
+  );
+}
 
 function App() {
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || null);
@@ -13,13 +40,12 @@ function App() {
   const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '');
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('base_url') || '');
 
-  // Target State
-  const [repoUrl, setRepoUrl] = useState(localStorage.getItem('repo_url') || '');
-  const [issueLinks, setIssueLinks] = useState(localStorage.getItem('issue_links') || '');
+  // Target State - single issue link only
+  const [issueLink, setIssueLink] = useState(localStorage.getItem('issue_link') || '');
 
   // Execution State
   const [isRunning, setIsRunning] = useState(false);
-  const [activeHuntId, setActiveHuntId] = useState(localStorage.getItem('active_hunt_id') || null);
+  const [activeHuntId, setActiveHuntId] = useState(null);
   const [logs, setLogs] = useState([]);
   const [approvalBranch, setApprovalBranch] = useState(null);
   const [approvalDiff, setApprovalDiff] = useState(null);
@@ -27,82 +53,80 @@ function App() {
   const logsEndRef = useRef(null);
   const pollRef = useRef(null);
 
-  // History State
+  // Hunt List State
   const [hunts, setHunts] = useState([]);
-  const [selectedHunt, setSelectedHunt] = useState(null);
-  const [selectedHuntLogs, setSelectedHuntLogs] = useState([]);
 
   // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // Fetch hunts for history sidebar
+  // Save config to local storage
+  useEffect(() => {
+    localStorage.setItem('provider', provider);
+    localStorage.setItem('model', model);
+    localStorage.setItem('llm_api_key', apiKey);
+    localStorage.setItem('github_token', githubToken);
+    localStorage.setItem('base_url', baseUrl);
+    localStorage.setItem('issue_link', issueLink);
+  }, [provider, model, apiKey, githubToken, baseUrl, issueLink]);
+
+  // Fetch hunts on load, auto-reconnect to running hunts
   const fetchHunts = () => {
-    if (authToken) {
-      fetch('/api/hunts', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      })
-        .then(res => res.json())
-        .then(data => setHunts(data))
-        .catch(err => console.error("Error fetching hunts:", err));
-    }
+    if (!authToken) return;
+    fetch('/api/hunts', { headers: { 'Authorization': `Bearer ${authToken}` } })
+      .then(res => res.json())
+      .then(data => setHunts(data))
+      .catch(err => console.error("Error fetching hunts:", err));
   };
 
   useEffect(() => {
     if (!authToken) return;
-    
-    // Fetch hunts, then check if any are running
-    fetch('/api/hunts', {
-      headers: { 'Authorization': `Bearer ${authToken}` }
-    })
+    fetch('/api/hunts', { headers: { 'Authorization': `Bearer ${authToken}` } })
       .then(res => res.json())
       .then(data => {
         setHunts(data);
         // Auto-reconnect to the most recent running hunt
         const runningHunt = data.find(h => h.status === 'running');
         if (runningHunt && !pollRef.current) {
-          setActiveHuntId(runningHunt.id);
-          localStorage.setItem('active_hunt_id', runningHunt.id);
-          reconnectToHunt(runningHunt.id);
+          startPolling(runningHunt.id);
         }
       })
       .catch(err => console.error("Error fetching hunts:", err));
   }, [authToken]);
 
-  // Poll logs for a running hunt (reconnect after page reload)
-  const reconnectToHunt = async (huntId) => {
-    setIsRunning(true);
-    setSelectedHunt(null);
-    setLogs(['[SYSTEM] Reconnecting to running hunt...']);
+  // --- Polling logic ---
+  const startPolling = async (huntId) => {
+    // Stop any existing polling first
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     
-    // Load existing logs first
+    setActiveHuntId(huntId);
+    setIsRunning(true);
+    setLogs(['[SYSTEM] Loading hunt logs...']);
+    
+    // Load existing logs
     try {
       const res = await fetch(`/api/hunts/${huntId}/logs`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       const existingLogs = await res.json();
-      if (existingLogs.length > 0) {
-        setLogs(existingLogs);
-      }
+      if (existingLogs.length > 0) setLogs(existingLogs);
     } catch (e) {
-      console.error('Failed to load existing logs:', e);
+      console.error('Failed to load logs:', e);
     }
     
-    // Start polling for new logs
     let lastLogCount = 0;
     pollRef.current = setInterval(async () => {
       try {
-        // Check hunt status
         const huntRes = await fetch('/api/hunts', {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
         const allHunts = await huntRes.json();
-        setHunts(allHunts); // Keep sidebar fresh
+        setHunts(allHunts);
         const hunt = allHunts.find(h => h.id === huntId);
         
-        if (!hunt || hunt.status !== 'running') {
-          // Hunt finished — load final logs and stop polling
+        if (!hunt || (hunt.status !== 'running')) {
+          // Hunt finished — load final logs
           const logsRes = await fetch(`/api/hunts/${huntId}/logs`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
           });
@@ -110,12 +134,9 @@ function App() {
           setLogs(finalLogs);
           setIsRunning(false);
           setActiveHuntId(null);
-          localStorage.removeItem('active_hunt_id');
           clearInterval(pollRef.current);
           pollRef.current = null;
-          if (hunt && hunt.status === 'pending_approval') {
-            fetchPendingApprovals();
-          }
+          if (hunt && hunt.status === 'pending_approval') fetchPendingApprovals();
           return;
         }
         
@@ -131,64 +152,74 @@ function App() {
       } catch (e) {
         console.error('Polling error:', e);
       }
-    }, 3000); // Poll every 3 seconds
+    }, 3000);
   };
 
   // Cleanup polling on unmount
   useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  const handleSelectHunt = async (hunt) => {
-    setSelectedHunt(hunt);
-    try {
-      const res = await fetch(`/api/hunts/${hunt.id}/logs`, {
+  // --- Click hunt in sidebar to view/poll ---
+  const handleSelectHunt = (hunt) => {
+    if (hunt.status === 'running') {
+      startPolling(hunt.id);
+    } else {
+      // Just load its logs into the terminal (no polling)
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      setActiveHuntId(hunt.id);
+      setIsRunning(false);
+      fetch(`/api/hunts/${hunt.id}/logs`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-      const logsData = await res.json();
-      setSelectedHuntLogs(logsData);
-    } catch (e) {
-      console.error(e);
+      })
+        .then(res => res.json())
+        .then(data => setLogs(data.length > 0 ? data : ['[SYSTEM] No logs for this hunt.']))
+        .catch(() => setLogs(['[ERROR] Failed to load logs.']));
     }
   };
 
-  // Save config to local storage
-  useEffect(() => {
-    localStorage.setItem('provider', provider);
-    localStorage.setItem('model', model);
-    localStorage.setItem('llm_api_key', apiKey);
-    localStorage.setItem('github_token', githubToken);
-    localStorage.setItem('base_url', baseUrl);
-    localStorage.setItem('repo_url', repoUrl);
-    localStorage.setItem('issue_links', issueLinks);
-  }, [provider, model, apiKey, githubToken, baseUrl, repoUrl, issueLinks]);
+  // --- Delete hunt ---
+  const handleDeleteHunt = async (e, huntId) => {
+    e.stopPropagation(); // Don't trigger select
+    if (!confirm('Delete this hunt and all its logs?')) return;
+    try {
+      await fetch(`/api/hunts/${huntId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      // If we were polling this hunt, stop
+      if (activeHuntId === huntId) {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        setActiveHuntId(null);
+        setIsRunning(false);
+        setLogs([]);
+      }
+      fetchHunts();
+    } catch (err) {
+      alert('Failed to delete hunt: ' + err.message);
+    }
+  };
 
+  // --- Approvals ---
   const handleApprove = async (action) => {
     if (!approvalHuntId) return;
     try {
       await fetch('/api/approve', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({ hunt_id: approvalHuntId, action })
       });
       setApprovalBranch(null);
       setApprovalDiff(null);
       setApprovalHuntId(null);
     } catch (e) {
-      alert("Error sending approval: " + e.message);
+      alert("Error: " + e.message);
     }
   };
 
   const fetchPendingApprovals = async () => {
     try {
-      const res = await fetch('/api/approvals', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
+      const res = await fetch('/api/approvals', { headers: { 'Authorization': `Bearer ${authToken}` } });
       const data = await res.json();
       if (data.pending && data.pending.length > 0) {
         setApprovalBranch(data.pending[0].branch);
@@ -199,15 +230,12 @@ function App() {
         setApprovalDiff(null);
         setApprovalHuntId(null);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 
-  useEffect(() => {
-    if (authToken) fetchPendingApprovals();
-  }, [authToken]);
+  useEffect(() => { if (authToken) fetchPendingApprovals(); }, [authToken]);
 
+  // --- Auth ---
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -223,9 +251,7 @@ function App() {
       } else {
         alert("Invalid password");
       }
-    } catch (e) {
-      console.error("Login error", e);
-    }
+    } catch (e) { console.error("Login error", e); }
   };
 
   const handleLogout = () => {
@@ -233,110 +259,95 @@ function App() {
     localStorage.removeItem('auth_token');
   };
 
+  // --- Start Hunt (from issue link) ---
   const handleStartHunt = async () => {
-    if (!apiKey || !githubToken || !repoUrl || !issueLinks) {
-      alert("Please fill in all required fields!");
+    const parsed = parseIssueLink(issueLink);
+    if (!parsed) {
+      alert("Please enter a valid GitHub issue link (e.g. https://github.com/owner/repo/issues/123)");
+      return;
+    }
+    if (!apiKey || !githubToken) {
+      alert("Please fill in API Key and GitHub Token!");
       return;
     }
 
+    // Stop any existing polling
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     setIsRunning(true);
-    setSelectedHunt(null); // Clear selected history item
+    setActiveHuntId(null);
     setApprovalBranch(null);
     setApprovalDiff(null);
     setApprovalHuntId(null);
     setLogs(["[SYSTEM] Connecting to Issue Hunter Backend..."]);
-    // Stop any existing polling
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-
-    const issueNum = parseInt(issueLinks.split('/').pop());
 
     try {
       const res = await fetch('/api/hunt', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({
-          repo_url: repoUrl,
-          issues: [issueNum],
-          provider: provider,
-          model: model,
+          repo_url: parsed.repoUrl,
+          issues: [parsed.issueNum],
+          provider, model,
           api_key: apiKey,
           github_token: githubToken,
           base_url: baseUrl || undefined
         })
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to start hunt. Server responded with " + res.status);
-      }
+      if (!res.ok) throw new Error("Server responded with " + res.status);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
-      
       let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
         buffer += decoder.decode(value, { stream: true });
-        
         let boundary = buffer.indexOf('\n\n');
         while (boundary !== -1) {
           const chunk = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
-          
           if (chunk.startsWith('data: ')) {
             let msg = chunk.slice(6).replace(/__NEWLINE__/g, '\n');
             if (msg.startsWith('__APPROVAL_REQUIRED__:')) {
               fetchPendingApprovals();
             } else {
-              // Capture hunt ID from the first streamed message
               if (msg.startsWith('Workflow queued. Hunt ID: ')) {
                 const hid = msg.split('Hunt ID: ')[1].trim();
                 setActiveHuntId(hid);
-                localStorage.setItem('active_hunt_id', hid);
               }
               setLogs(prev => [...prev, msg]);
             }
           }
-          
           boundary = buffer.indexOf('\n\n');
         }
       }
       setIsRunning(false);
       setActiveHuntId(null);
-      localStorage.removeItem('active_hunt_id');
-      fetchHunts(); // Refresh history list
-
+      fetchHunts();
     } catch (error) {
       console.error("Failed to start hunt", error);
       setIsRunning(false);
       setActiveHuntId(null);
-      localStorage.removeItem('active_hunt_id');
       setLogs(prev => [...prev, `[ERROR] ${error.message}`]);
-      fetchHunts(); // Refresh history list
+      fetchHunts();
     }
   };
 
+  // --- Diff renderer ---
   const renderDiff = (diffStr) => {
     if (!diffStr) return <div style={{ color: 'var(--text-secondary)' }}>No diff available.</div>;
     return diffStr.split('\n').map((line, i) => {
-      let color = '#a9b1d6';
-      let background = 'transparent';
+      let color = '#a9b1d6', background = 'transparent';
       if (line.startsWith('+') && !line.startsWith('+++')) { color = '#9ece6a'; background = 'rgba(158, 206, 106, 0.1)'; }
       else if (line.startsWith('-') && !line.startsWith('---')) { color = '#f7768e'; background = 'rgba(247, 118, 142, 0.1)'; }
       else if (line.startsWith('@@')) color = '#7aa2f7';
-      return (
-        <div key={i} style={{ color, background, fontFamily: 'Fira Code, monospace', whiteSpace: 'pre-wrap', padding: '0 4px' }}>
-          {line || ' '}
-        </div>
-      );
+      return <div key={i} style={{ color, background, fontFamily: 'Fira Code, monospace', whiteSpace: 'pre-wrap', padding: '0 4px' }}>{line || ' '}</div>;
     });
   };
 
+  // --- Login screen ---
   if (!authToken) {
     return (
       <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -346,12 +357,7 @@ function App() {
           <form onSubmit={handleLogin} style={{ marginTop: '2rem' }}>
             <div className="form-group">
               <label>Admin Password</label>
-              <input 
-                type="password" 
-                value={passwordInput} 
-                onChange={e => setPasswordInput(e.target.value)} 
-                placeholder="Enter password..." 
-              />
+              <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Enter password..." />
             </div>
             <button className="btn" type="submit" style={{ width: '100%', marginTop: '1rem' }}>Login</button>
           </form>
@@ -359,6 +365,14 @@ function App() {
       </div>
     );
   }
+
+  // --- Group hunts by repo ---
+  const grouped = {};
+  hunts.forEach(hunt => {
+    const repo = hunt.repo_url.split('/').slice(-2).join('/');
+    if (!grouped[repo]) grouped[repo] = [];
+    grouped[repo].push(hunt);
+  });
 
   return (
     <div className="app-container" style={{ maxWidth: '100%', padding: '2rem' }}>
@@ -369,78 +383,68 @@ function App() {
             Autonomous AI agent for fixing open-source bugs.
           </p>
         </div>
-        <div>
-          <button 
-            className="btn" 
-            style={{ background: 'var(--danger-color)' }}
-            onClick={handleLogout}
-          >
-            Logout
-          </button>
-        </div>
+        <button className="btn" style={{ background: 'var(--danger-color)' }} onClick={handleLogout}>Logout</button>
       </header>
 
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
-        {/* Left Sidebar: History */}
-        <div className="glass-panel" style={{ width: '300px', flexShrink: 0, maxHeight: '80vh', overflowY: 'auto' }}>
-          <h2><History size={20} /> Past Hunts</h2>
+        {/* Left Sidebar: Hunting List */}
+        <div className="glass-panel" style={{ width: '320px', flexShrink: 0, maxHeight: '85vh', overflowY: 'auto' }}>
+          <h2><List size={20} /> Hunting List</h2>
           {hunts.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No hunts recorded yet.</p>
+            <p style={{ color: 'var(--text-secondary)' }}>No hunts yet. Start one!</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {(() => {
-                // Filter by Target Mission inputs
-                const filteredHunts = hunts.filter(hunt => {
-                  if (repoUrl && !hunt.repo_url.toLowerCase().includes(repoUrl.toLowerCase())) return false;
-                  if (issueLinks) {
-                    const issueQuery = issueLinks.split('/').pop().replace('#', '');
-                    if (!hunt.issues.includes(parseInt(issueQuery)) && !hunt.issues.includes(issueQuery)) return false;
-                  }
-                  return true;
-                });
-                
-                // Group by repo
-                const grouped = {};
-                filteredHunts.forEach(hunt => {
-                  if (!grouped[hunt.repo_url]) grouped[hunt.repo_url] = [];
-                  grouped[hunt.repo_url].push(hunt);
-                });
-                
-                if (Object.keys(grouped).length === 0) {
-                  return <p style={{ color: 'var(--text-secondary)' }}>No matches found for your filter.</p>;
-                }
-                
-                return Object.entries(grouped).map(([rUrl, rHunts]) => (
-                  <div key={rUrl} style={{ marginBottom: '1rem' }}>
-                    <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-                      {rUrl.split('/').pop()}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {rHunts.map(hunt => (
-                        <div 
-                          key={hunt.id} 
-                          onClick={() => {
-                            handleSelectHunt(hunt);
-                            setRepoUrl(hunt.repo_url);
-                            setIssueLinks(hunt.issues.join(', '));
-                          }}
-                          style={{ 
-                            padding: '0.75rem', 
-                            background: selectedHunt?.id === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)', 
-                            borderRadius: '8px', 
-                            cursor: 'pointer',
-                            border: `1px solid ${hunt.status === 'completed' ? 'var(--success-color)' : hunt.status === 'failed' ? 'var(--danger-color)' : 'var(--panel-border)'}`
-                          }}
-                        >
-                          <div style={{ fontSize: '0.875rem' }}>Issue: #{hunt.issues}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{new Date(hunt.created_at).toLocaleString()}</div>
-                          <div style={{ fontSize: '0.75rem', color: hunt.status === 'running' ? 'var(--warning-color)' : 'var(--text-secondary)', marginTop: '0.25rem' }}>Status: {hunt.status}</div>
-                        </div>
-                      ))}
-                    </div>
+              {Object.entries(grouped).map(([repo, rHunts]) => (
+                <div key={repo}>
+                  <div style={{
+                    fontWeight: 'bold', fontSize: '0.8rem', color: 'var(--text-secondary)',
+                    textTransform: 'uppercase', letterSpacing: '0.05em',
+                    borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.4rem', marginBottom: '0.5rem'
+                  }}>
+                    {repo}
                   </div>
-                ));
-              })()}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    {rHunts.map(hunt => (
+                      <div
+                        key={hunt.id}
+                        onClick={() => handleSelectHunt(hunt)}
+                        style={{
+                          padding: '0.6rem 0.75rem',
+                          background: activeHuntId === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          border: `1px solid ${activeHuntId === hunt.id ? 'var(--accent-color)' : 'transparent'}`,
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>Issue #{hunt.issues}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                            <StatusBadge status={hunt.status} />
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                              {new Date(hunt.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeleteHunt(e, hunt.id)}
+                          title="Delete hunt"
+                          style={{
+                            background: 'transparent', border: 'none', color: 'var(--text-secondary)',
+                            cursor: 'pointer', padding: '4px', borderRadius: '4px',
+                            opacity: 0.5, transition: 'opacity 0.15s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                          onMouseLeave={e => e.currentTarget.style.opacity = 0.5}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -452,7 +456,6 @@ function App() {
             {/* Configuration Panel */}
             <div className="glass-panel">
               <h2><Settings size={20} /> Configuration</h2>
-              
               <div className="grid-2">
                 <div className="form-group">
                   <label>LLM Provider</label>
@@ -462,81 +465,51 @@ function App() {
                     <option value="anthropic">Anthropic</option>
                   </select>
                 </div>
-                
                 <div className="form-group">
                   <label>Model</label>
-                  <input 
-                    type="text" 
-                    value={model} 
-                    onChange={e => setModel(e.target.value)}
-                    placeholder="e.g. gemini-3.5-pro"
-                  />
+                  <input type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. gemini-3.5-pro" />
                 </div>
               </div>
-
               <div className="form-group">
                 <label><Key size={14} style={{display:'inline', marginRight:4}} /> API Key</label>
-                <input 
-                  type="password" 
-                  value={apiKey} 
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="Your LLM API Key"
-                />
+                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Your LLM API Key" />
               </div>
-
               <div className="form-group">
                 <label><GitBranch size={14} style={{display:'inline', marginRight:4}} /> GitHub Token</label>
-                <input 
-                  type="password" 
-                  value={githubToken} 
-                  onChange={e => setGithubToken(e.target.value)}
-                  placeholder="ghp_xxxxxxxxxxxx"
-                />
+                <input type="password" value={githubToken} onChange={e => setGithubToken(e.target.value)} placeholder="ghp_xxxxxxxxxxxx" />
               </div>
-
               <div className="form-group">
                 <label>Custom Base URL (Optional)</label>
-                <input 
-                  type="text" 
-                  value={baseUrl} 
-                  onChange={e => setBaseUrl(e.target.value)}
-                  placeholder="e.g. http://localhost:11434/v1"
-                />
+                <input type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="e.g. http://localhost:11434/v1" />
               </div>
             </div>
 
             {/* Target Panel */}
             <div className="glass-panel">
               <h2><Crosshair size={20} /> Target Mission</h2>
-              
               <div className="form-group">
-                <label>Repository URL</label>
+                <label>GitHub Issue Link</label>
                 <input 
                   type="text" 
-                  value={repoUrl} 
-                  onChange={e => setRepoUrl(e.target.value)}
-                  placeholder="https://github.com/chalk/chalk"
+                  value={issueLink} 
+                  onChange={e => setIssueLink(e.target.value)}
+                  placeholder="https://github.com/owner/repo/issues/123"
                 />
+                {issueLink && parseIssueLink(issueLink) && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '0.25rem' }}>
+                    ✓ Repo: {parseIssueLink(issueLink).repoUrl.split('/').slice(-2).join('/')} · Issue #{parseIssueLink(issueLink).issueNum}
+                  </div>
+                )}
+                {issueLink && !parseIssueLink(issueLink) && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--danger-color)', marginTop: '0.25rem' }}>
+                    ✗ Invalid format. Use: https://github.com/owner/repo/issues/123
+                  </div>
+                )}
               </div>
 
-              <div className="form-group">
-                <label>Issue Numbers or Links</label>
-                <input 
-                  type="text" 
-                  value={issueLinks} 
-                  onChange={e => setIssueLinks(e.target.value)}
-                  placeholder="669, 702 or https://github.com/chalk/chalk/issues/669"
-                />
-              </div>
-
-              <button 
-                className="btn" 
-                onClick={handleStartHunt} 
-                disabled={isRunning}
-                style={{ marginTop: '1rem' }}
-              >
+              <button className="btn" onClick={handleStartHunt} disabled={isRunning} style={{ marginTop: '1rem' }}>
                 {isRunning ? (
-                  <>Hunting... <span className="terminal-dot dot-yellow"></span></>
+                  <><Loader size={18} className="spin-icon" /> Hunting...</>
                 ) : (
                   <><Play size={18} /> Start Hunt</>
                 )}
@@ -544,116 +517,63 @@ function App() {
             </div>
           </div>
 
-          {/* Terminal / Details Area */}
-          {selectedHunt ? (
-            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          {/* Terminal */}
+          <div className="terminal-wrapper">
+            <div className="terminal-header">
+              <div className="terminal-dots">
+                <div className="terminal-dot dot-red"></div>
+                <div className="terminal-dot dot-yellow"></div>
+                <div className="terminal-dot dot-green"></div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Terminal size={14} /> Agent Live Terminal
+                {isRunning && <Loader size={12} className="spin-icon" style={{ color: 'var(--warning-color)' }} />}
+                {activeHuntId && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>({activeHuntId.slice(0,8)}...)</span>}
+              </div>
               <button 
-                onClick={() => setSelectedHunt(null)}
+                onClick={() => setLogs([])}
                 style={{
-                  position: 'absolute', top: '1rem', right: '1rem',
-                  background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer'
+                  background: 'transparent', border: '1px solid var(--panel-border)', 
+                  color: 'var(--text-secondary)', borderRadius: '4px',
+                  padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
                 }}
               >
-                <X size={24} />
+                Clear
               </button>
-              <h2>History Details: {selectedHunt.repo_url.split('/').pop()}</h2>
-              <div style={{ flex: 1, overflowY: 'auto', marginTop: '1rem' }}>
-                <h3>Report</h3>
-                <pre style={{ 
-                  background: 'rgba(0,0,0,0.3)', 
-                  padding: '1rem', 
-                  borderRadius: '8px', 
-                  overflowX: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  marginBottom: '1rem',
-                  fontFamily: 'inherit'
-                }}>
-                  {selectedHunt.report_md || 'No report generated.'}
-                </pre>
-                
-                <h3>Logs</h3>
-                <div style={{ 
-                  background: 'var(--terminal-bg)', 
-                  padding: '1rem', 
-                  borderRadius: '8px', 
-                  fontFamily: 'Fira Code, monospace',
-                  fontSize: '0.875rem',
-                  color: '#a9b1d6',
-                  maxHeight: '400px',
-                  overflowY: 'auto'
-                }}>
-                  {selectedHuntLogs.map((log, i) => (
-                    <div key={i} className="log-entry">{log}</div>
-                  ))}
-                </div>
-              </div>
             </div>
-          ) : (
-            <div className="terminal-wrapper">
-              <div className="terminal-header">
-                <div className="terminal-dots">
-                  <div className="terminal-dot dot-red"></div>
-                  <div className="terminal-dot dot-yellow"></div>
-                  <div className="terminal-dot dot-green"></div>
+            <div className="terminal-content">
+              {logs.length === 0 ? (
+                <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                  Waiting for mission control... Click a hunt or start a new one.
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Terminal size={14} /> Agent Live Terminal
-                </div>
-                <button 
-                  onClick={() => setLogs([])}
-                  style={{
-                    background: 'transparent', 
-                    border: '1px solid var(--panel-border)', 
-                    color: 'var(--text-secondary)',
-                    borderRadius: '4px',
-                    padding: '2px 8px',
-                    fontSize: '0.75rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="terminal-content">
-                {logs.length === 0 ? (
-                  <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                    Waiting for mission control...
+              ) : (
+                logs.map((log, i) => (
+                  <div 
+                    key={i} 
+                    className={`log-entry ${log.includes('ERROR') || log.includes('Failed') || log.includes('Exception') ? 'error' : log.includes('Successfully') || log.includes('Complete') || log.includes('APPROVED') ? 'success' : log.includes('Phase') || log.includes('ATTEMPT') ? 'phase' : 'info'}`}
+                  >
+                    {log}
                   </div>
-                ) : (
-                  logs.map((log, i) => (
-                    <div 
-                      key={i} 
-                      className={`log-entry ${log.includes('ERROR') || log.includes('Failed') ? 'error' : log.includes('Successfully') || log.includes('Complete') ? 'success' : 'info'}`}
-                    >
-                      <span style={{opacity: 0.5}}>[{new Date().toLocaleTimeString()}]</span> {log}
-                    </div>
-                  ))
-                )}
-                <div ref={logsEndRef} />
-              </div>
+                ))
+              )}
+              <div ref={logsEndRef} />
             </div>
-          )}
+          </div>
 
           {/* Approval Dashboard */}
           {approvalBranch && (
             <div className="glass-panel" style={{ border: '1px solid var(--accent-glow)', boxShadow: '0 0 20px rgba(99,102,241,0.2)' }}>
               <h2><FileCheck size={20} /> Action Required: Approve PR Creation</h2>
               <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                The agent has finished implementing the fix on branch <strong style={{color: '#fff'}}>{approvalBranch}</strong> and is ready to open a Pull Request.
+                Branch <strong style={{color: '#fff'}}>{approvalBranch}</strong> is ready for PR.
               </p>
-              
               <div style={{
-                background: '#1a1b26',
-                borderRadius: '8px',
-                padding: '1rem',
-                maxHeight: '400px',
-                overflowY: 'auto',
-                marginBottom: '1rem',
+                background: '#1a1b26', borderRadius: '8px', padding: '1rem',
+                maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem',
                 border: '1px solid var(--panel-border)'
               }}>
                 {renderDiff(approvalDiff)}
               </div>
-
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button className="btn" style={{ background: 'var(--success-color)' }} onClick={() => handleApprove('approve')}>
                   Approve & Create PR

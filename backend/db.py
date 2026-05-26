@@ -129,3 +129,14 @@ def get_hunt_logs(hunt_id: str):
         except Exception as e:
             print("Failed to fetch logs:", e)
     return []
+
+def delete_hunt(hunt_id: str):
+    supabase = get_supabase()
+    if supabase:
+        try:
+            # Logs have ON DELETE CASCADE, but delete explicitly just in case
+            supabase.table('logs').delete().eq("hunt_id", hunt_id).execute()
+            supabase.table('hunts').delete().eq("id", hunt_id).execute()
+        except Exception as e:
+            print("Failed to delete hunt:", e)
+

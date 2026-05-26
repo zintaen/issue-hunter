@@ -11,6 +11,7 @@
   --accent-hover: #818cf8;
   --success-color: #10b981;
   --danger-color: #ef4444;
+  --warning-color: #e0af68;
   --terminal-bg: #090a0c;
 }
 
@@ -153,7 +154,7 @@ input[type="password"] {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 400px;
+  height: 500px;
 }
 
 .terminal-header {
@@ -188,19 +189,30 @@ input[type="password"] {
   overflow-y: auto;
   flex: 1;
   font-family: 'Fira Code', monospace;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   line-height: 1.5;
   color: #a9b1d6;
 }
 
 .log-entry {
   margin-bottom: 4px;
+  word-break: break-word;
 }
 
 .log-entry.info { color: #7aa2f7; }
 .log-entry.success { color: #9ece6a; }
 .log-entry.error { color: #f7768e; }
 .log-entry.warning { color: #e0af68; }
+.log-entry.phase { color: #bb9af7; font-weight: 600; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
 
 ::-webkit-scrollbar {
   width: 8px;
