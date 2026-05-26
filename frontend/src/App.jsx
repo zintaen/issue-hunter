@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, List, Lock, X, Trash2, Loader, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import './index.css';
 
 // Parse issue link to extract repo URL and issue number
@@ -517,48 +518,60 @@ function App() {
             </div>
           </div>
 
-          {/* Terminal */}
-          <div className="terminal-wrapper">
-            <div className="terminal-header">
-              <div className="terminal-dots">
-                <div className="terminal-dot dot-red"></div>
-                <div className="terminal-dot dot-yellow"></div>
-                <div className="terminal-dot dot-green"></div>
+          {/* Terminal or Report */}
+          {activeHuntId && hunts.find(h => h.id === activeHuntId)?.status === 'completed' && hunts.find(h => h.id === activeHuntId)?.report_md ? (
+            <div className="glass-panel" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <CheckCircle size={20} color="var(--success-color)" />
+                <h2 style={{ margin: 0 }}>Mission Accomplished</h2>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Terminal size={14} /> Agent Live Terminal
-                {isRunning && <Loader size={12} className="spin-icon" style={{ color: 'var(--warning-color)' }} />}
-                {activeHuntId && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>({activeHuntId.slice(0,8)}...)</span>}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', border: '1px solid var(--panel-border)', lineHeight: '1.6' }}>
+                <ReactMarkdown>{hunts.find(h => h.id === activeHuntId).report_md}</ReactMarkdown>
               </div>
-              <button 
-                onClick={() => setLogs([])}
-                style={{
-                  background: 'transparent', border: '1px solid var(--panel-border)', 
-                  color: 'var(--text-secondary)', borderRadius: '4px',
-                  padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer'
-                }}
-              >
-                Clear
-              </button>
             </div>
-            <div className="terminal-content">
-              {logs.length === 0 ? (
-                <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                  Waiting for mission control... Click a hunt or start a new one.
+          ) : (
+            <div className="terminal-wrapper">
+              <div className="terminal-header">
+                <div className="terminal-dots">
+                  <div className="terminal-dot dot-red"></div>
+                  <div className="terminal-dot dot-yellow"></div>
+                  <div className="terminal-dot dot-green"></div>
                 </div>
-              ) : (
-                logs.map((log, i) => (
-                  <div 
-                    key={i} 
-                    className={`log-entry ${log.includes('ERROR') || log.includes('Failed') || log.includes('Exception') ? 'error' : log.includes('Successfully') || log.includes('Complete') || log.includes('APPROVED') ? 'success' : log.includes('Phase') || log.includes('ATTEMPT') ? 'phase' : 'info'}`}
-                  >
-                    {log}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Terminal size={14} /> Agent Live Terminal
+                  {isRunning && <Loader size={12} className="spin-icon" style={{ color: 'var(--warning-color)' }} />}
+                  {activeHuntId && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>({activeHuntId.slice(0,8)}...)</span>}
+                </div>
+                <button 
+                  onClick={() => setLogs([])}
+                  style={{
+                    background: 'transparent', border: '1px solid var(--panel-border)', 
+                    color: 'var(--text-secondary)', borderRadius: '4px',
+                    padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer', marginLeft: 'auto'
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="terminal-content">
+                {logs.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    Waiting for mission control... Click a hunt or start a new one.
                   </div>
-                ))
-              )}
-              <div ref={logsEndRef} />
+                ) : (
+                  logs.map((log, i) => (
+                    <div 
+                      key={i} 
+                      className={`log-entry ${log.includes('ERROR') || log.includes('Failed') || log.includes('Exception') ? 'error' : log.includes('Successfully') || log.includes('Complete') || log.includes('APPROVED') ? 'success' : log.includes('Phase') || log.includes('ATTEMPT') ? 'phase' : 'info'}`}
+                    >
+                      {log}
+                    </div>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Approval Dashboard */}
           {approvalBranch && (

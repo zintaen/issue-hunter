@@ -179,6 +179,10 @@ async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
         try:
             report_md = workflow_task.result()
             update_hunt_status(hunt_id, "completed", report_md=report_md)
+            
+            from backend.db import delete_other_hunts
+            delete_other_hunts(hunt_id)
+            
             yield f"data: Workflow completed successfully.\n\n"
         except Exception as e:
             update_hunt_status(hunt_id, "failed")

@@ -140,3 +140,36 @@ def delete_hunt(hunt_id: str):
         except Exception as e:
             print("Failed to delete hunt:", e)
 
+def delete_other_hunts(hunt_id: str):
+    """Deletes all other hunts with the same issues and repo, keeping only the successful one. Also attempts to kill their sandboxes."""
+    hunt = get_hunt(hunt_id)
+    if not hunt: return
+    
+    supabase = get_supabase()
+    if supabase:
+        try:
+            response = supabase.table('hunts').select("id, issues").eq("repo_url", hunt['repo_url']).neq("id", hunt_id).execute()
+            import os
+            api_key = os.environ.get("E2B_API_KEY")
+            
+            for r in response.data:
+                if r.get('issues') == hunt['issues']:
+                    other_id = r['id']
+                    # Try to kill sandbox
+                    try:
+                        logs = get_hunt_logs(other_id)
+                        sandbox_id = None
+                        for log in logs:
+                            if "[SANDBOX_ID:" in log:
+                                sandbox_id = log.split("[SANDBOX_ID:")[1].split("]")[0]
+                                break
+                        if sandbox_id and api_key:
+                            from e2b_code_interpreter import Sandbox
+                            Sandbox.kill(sandbox_id, api_key=api_key)
+                    except Exception as e:
+                        print(f"Failed to kill E2B sandbox for other hunt {other_id}: {e}")
+                    
+                    # Delete the hunt
+                    delete_hunt(other_id)
+        except Exception as e:
+            print("Failed to delete other hunts:", e)

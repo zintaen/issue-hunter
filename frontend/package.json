@@ -14,7 +14,8 @@
     "prismjs": "^1.30.0",
     "react": "^19.2.6",
     "react-diff-viewer-continued": "^4.2.2",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
