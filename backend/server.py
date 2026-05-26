@@ -11,14 +11,31 @@ import sys
 # Add the parent directory to sys.path so we can import agents
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.orchestrator import run_orchestrator
-from db import init_db, create_hunt, insert_log, update_hunt_status, get_hunts, get_hunt_logs, get_hunt, get_pending_approvals
+import traceback
+import_error = None
+try:
+    from agents.orchestrator import run_orchestrator
+    from db import init_db, create_hunt, insert_log, update_hunt_status, get_hunts, get_hunt_logs, get_hunt, get_pending_approvals
+except Exception as e:
+    import_error = traceback.format_exc()
 
 app = FastAPI(title="Issue Hunter API")
 
+@app.get("/api/debug")
+def debug_info():
+    import os, sys
+    return {
+        "import_error": import_error,
+        "sys_path": sys.path,
+        "cwd": os.getcwd(),
+        "files_in_cwd": os.listdir("."),
+        "files_in_var_task": os.listdir("/var/task") if os.path.exists("/var/task") else []
+    }
+
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    if import_error is None:
+        init_db()
 
 app.add_middleware(
     CORSMiddleware,
