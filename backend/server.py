@@ -10,6 +10,8 @@ import sys
 
 # Add the parent directory to sys.path so we can import agents
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the current directory so we can import 'db' when run by Vercel
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import traceback
 import_error = None
