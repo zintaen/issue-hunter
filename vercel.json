@@ -12,7 +12,8 @@
       "src": "backend/server.py",
       "use": "@vercel/python",
       "config": {
-        "maxDuration": 300
+        "maxDuration": 300,
+        "includeFiles": "agents/**"
       }
     }
   ],
