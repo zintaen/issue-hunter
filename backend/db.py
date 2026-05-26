@@ -104,7 +104,7 @@ def get_hunts():
     supabase = get_supabase()
     if supabase:
         try:
-            response = supabase.table('hunts').select("*").order("created_at", desc=True).execute()
+            response = supabase.table('hunts').select("id, repo_url, issues, provider, model, status, report_md, branch_name, created_at, updated_at").order("created_at", desc=True).execute()
             return response.data
         except Exception as e:
             print("Failed to fetch hunts:", e)
