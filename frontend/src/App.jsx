@@ -19,11 +19,13 @@ function App() {
 
   // Execution State
   const [isRunning, setIsRunning] = useState(false);
+  const [activeHuntId, setActiveHuntId] = useState(localStorage.getItem('active_hunt_id') || null);
   const [logs, setLogs] = useState([]);
   const [approvalBranch, setApprovalBranch] = useState(null);
   const [approvalDiff, setApprovalDiff] = useState(null);
   const [approvalHuntId, setApprovalHuntId] = useState(null);
   const logsEndRef = useRef(null);
+  const pollRef = useRef(null);
 
   // History State
   const [hunts, setHunts] = useState([]);
@@ -49,7 +51,81 @@ function App() {
 
   useEffect(() => {
     fetchHunts();
+    // On page load, check if there was a running hunt and reconnect
+    if (authToken && activeHuntId) {
+      reconnectToHunt(activeHuntId);
+    }
   }, [authToken]);
+
+  // Poll logs for a running hunt (reconnect after page reload)
+  const reconnectToHunt = async (huntId) => {
+    setIsRunning(true);
+    setLogs(['[SYSTEM] Reconnecting to running hunt...']);
+    
+    // Load existing logs first
+    try {
+      const res = await fetch(`/api/hunts/${huntId}/logs`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      const existingLogs = await res.json();
+      if (existingLogs.length > 0) {
+        setLogs(existingLogs);
+      }
+    } catch (e) {
+      console.error('Failed to load existing logs:', e);
+    }
+    
+    // Start polling for new logs
+    let lastLogCount = 0;
+    pollRef.current = setInterval(async () => {
+      try {
+        // Check hunt status
+        const huntRes = await fetch('/api/hunts', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const hunts = await huntRes.json();
+        const hunt = hunts.find(h => h.id === huntId);
+        
+        if (!hunt || hunt.status !== 'running') {
+          // Hunt finished — load final logs and stop polling
+          const logsRes = await fetch(`/api/hunts/${huntId}/logs`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+          });
+          const finalLogs = await logsRes.json();
+          setLogs(finalLogs);
+          setIsRunning(false);
+          setActiveHuntId(null);
+          localStorage.removeItem('active_hunt_id');
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          fetchHunts();
+          if (hunt && hunt.status === 'pending_approval') {
+            fetchPendingApprovals();
+          }
+          return;
+        }
+        
+        // Fetch latest logs
+        const logsRes = await fetch(`/api/hunts/${huntId}/logs`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const allLogs = await logsRes.json();
+        if (allLogs.length > lastLogCount) {
+          lastLogCount = allLogs.length;
+          setLogs(allLogs);
+        }
+      } catch (e) {
+        console.error('Polling error:', e);
+      }
+    }, 3000); // Poll every 3 seconds
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const handleSelectHunt = async (hunt) => {
     setSelectedHunt(hunt);
@@ -155,6 +231,8 @@ function App() {
     setApprovalDiff(null);
     setApprovalHuntId(null);
     setLogs(["[SYSTEM] Connecting to Issue Hunter Backend..."]);
+    // Stop any existing polling
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
 
     const issueNum = parseInt(issueLinks.split('/').pop());
 
@@ -201,6 +279,12 @@ function App() {
             if (msg.startsWith('__APPROVAL_REQUIRED__:')) {
               fetchPendingApprovals();
             } else {
+              // Capture hunt ID from the first streamed message
+              if (msg.startsWith('Workflow queued. Hunt ID: ')) {
+                const hid = msg.split('Hunt ID: ')[1].trim();
+                setActiveHuntId(hid);
+                localStorage.setItem('active_hunt_id', hid);
+              }
               setLogs(prev => [...prev, msg]);
             }
           }
@@ -209,11 +293,15 @@ function App() {
         }
       }
       setIsRunning(false);
+      setActiveHuntId(null);
+      localStorage.removeItem('active_hunt_id');
       fetchHunts(); // Refresh history list
 
     } catch (error) {
       console.error("Failed to start hunt", error);
       setIsRunning(false);
+      setActiveHuntId(null);
+      localStorage.removeItem('active_hunt_id');
       setLogs(prev => [...prev, `[ERROR] ${error.message}`]);
       fetchHunts(); // Refresh history list
     }
