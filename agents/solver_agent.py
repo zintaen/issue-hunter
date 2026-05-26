@@ -2,7 +2,7 @@ import asyncio
 from agents.llm_client import get_client, run_agent_loop
 from agents.tools import (
     sandbox_run, create_branch, commit_and_push, web_search, fetch_webpage,
-    e2b_view_file, e2b_write_file, e2b_grep_search
+    e2b_view_file, e2b_write_file, e2b_grep_search, e2b_execute_python
 )
 
 async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, previous_feedback: str = None, log_callback=None, provider: str = "gemini", base_url: str = None) -> tuple[bool, str]:
@@ -40,7 +40,7 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
     )
 
     client = get_client(api_key, provider, base_url)
-    tools = [sandbox_run, bound_create_branch, bound_commit_and_push, web_search, fetch_webpage, e2b_view_file, e2b_write_file, e2b_grep_search]
+    tools = [sandbox_run, bound_create_branch, bound_commit_and_push, web_search, fetch_webpage, e2b_view_file, e2b_write_file, e2b_grep_search, e2b_execute_python]
 
     await log(f"\n--- Starting Solver Agent for branch {branch_name} ---")
     

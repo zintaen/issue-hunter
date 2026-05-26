@@ -1,6 +1,6 @@
 import asyncio
 from agents.llm_client import get_client, run_agent_loop
-from agents.tools import sandbox_run, web_search, fetch_webpage, get_git_diff
+from agents.tools import sandbox_run, web_search, fetch_webpage, get_git_diff, e2b_execute_python
 
 async def run_reviewer_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, log_callback=None, provider: str = "gemini", base_url: str = None):
     """Runs the Reviewer Agent to analyze git diffs and provide feedback."""
@@ -43,7 +43,7 @@ You must output exactly one of two decisions at the end of your response:
         model=model,
         system_prompt=system_prompt,
         user_prompt=prompt,
-        tools=[sandbox_run, web_search, fetch_webpage],
+        tools=[sandbox_run, web_search, fetch_webpage, e2b_execute_python],
         log_callback=log_callback,
     )
     await log(f"[REVIEWER AGENT] Feedback:\n{review_text}")

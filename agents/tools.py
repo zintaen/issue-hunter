@@ -65,6 +65,17 @@ def sandbox_run(command: str) -> str:
     res = active_sandbox.commands.run(command, cwd=active_container_dir)
     return f"Exit Code: {res.exit_code}\nOutput:\n{res.stdout}\n{res.stderr}"
 
+def e2b_execute_python(code: str) -> str:
+    """Execute python code in a Jupyter notebook cell and return result."""
+    global active_sandbox
+    if not active_sandbox:
+        return "Error: No active E2B sandbox."
+    try:
+        execution = active_sandbox.run_code(code)
+        return execution.text
+    except Exception as e:
+        return f"Error executing Python code: {e}"
+
 def e2b_view_file(filepath: str) -> str:
     """View a file inside the E2B sandbox."""
     global active_sandbox, active_container_dir
