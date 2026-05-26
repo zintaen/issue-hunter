@@ -197,14 +197,26 @@ def fetch_hunt_logs(hunt_id: str, token: str = Depends(verify_token)):
 @app.delete("/api/hunts/{hunt_id}")
 def delete_hunt_endpoint(hunt_id: str, token: str = Depends(verify_token)):
     from backend.db import delete_hunt
-    from agents.tools import cleanup_sandbox
-    # Kill sandbox if hunt was running
+    import os
+    from e2b_code_interpreter import Sandbox
+    
     hunt = get_hunt(hunt_id)
     if hunt and hunt.get('status') == 'running':
         try:
-            cleanup_sandbox()
-        except Exception:
-            pass
+            logs = get_hunt_logs(hunt_id)
+            sandbox_id = None
+            for log in logs:
+                if "[SANDBOX_ID:" in log:
+                    sandbox_id = log.split("[SANDBOX_ID:")[1].split("]")[0]
+                    break
+            if sandbox_id:
+                api_key = os.environ.get("E2B_API_KEY")
+                if api_key:
+                    Sandbox.kill(sandbox_id, api_key=api_key)
+                    print(f"Killed sandbox {sandbox_id} for hunt {hunt_id}")
+        except Exception as e:
+            print(f"Failed to kill E2B sandbox for hunt {hunt_id}: {e}")
+            
     delete_hunt(hunt_id)
     return {"status": "deleted"}
 

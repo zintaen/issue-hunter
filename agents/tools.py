@@ -22,7 +22,7 @@ def start_sandbox(repo_dir: str) -> str:
         return "Failed"
     active_sandbox = Sandbox.create(timeout=3600)
     active_sandbox.commands.run("sudo apt-get update && sudo apt-get install -y git")
-    return "E2B Cloud Sandbox started successfully."
+    return f"E2B Cloud Sandbox started successfully. [SANDBOX_ID:{active_sandbox.sandbox_id}]"
 
 def cleanup_sandbox() -> str:
     """Kill the active E2B sandbox."""
