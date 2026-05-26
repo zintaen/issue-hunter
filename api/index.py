@@ -227,8 +227,75 @@ def delete_hunt_endpoint(hunt_id: str, token: str = Depends(verify_token)):
 class RecreatePRRequest(BaseModel):
     github_token: str
 
+def fallback_recreate_pr_task(hunt_id: str, repo_url: str, branch_name: str, diff_content: str, github_token: str, issue_num: int):
+    try:
+        from e2b_code_interpreter import Sandbox
+        from agents.tools import init_clients
+        import os
+        
+        api_key = os.environ.get("E2B_API_KEY")
+        if not api_key:
+            return
+            
+        init_clients(github_token, "/tmp")
+        from agents.tools import github_client
+        repo_full_name = repo_url.replace("https://github.com/", "")
+        repo = github_client.get_repo(repo_full_name)
+        user = github_client.get_user()
+        try:
+            fork = user.create_fork(repo)
+        except Exception:
+            fork = github_client.get_repo(f"{user.login}/{repo.name}")
+            
+        clone_url = fork.clone_url.replace("https://", f"https://{user.login}:{github_token}@")
+        
+        sandbox = Sandbox.create(timeout=300, api_key=api_key)
+        try:
+            sandbox.commands.run("sudo apt-get update && sudo apt-get install -y git")
+            sandbox.commands.run("git config --global user.email 'bot@issuehunter.dev'")
+            sandbox.commands.run("git config --global user.name 'Issue Hunter'")
+            
+            repo_dir = f"/home/user/workspace/{repo.name}"
+            sandbox.commands.run(f"git clone {clone_url} {repo_dir}")
+            
+            sandbox.files.write(f"{repo_dir}/patch.diff", diff_content)
+            
+            sandbox.commands.run(f"cd {repo_dir} && git checkout -b {branch_name}")
+            apply_res = sandbox.commands.run(f"cd {repo_dir} && git apply patch.diff")
+            if apply_res.exit_code != 0:
+                print(f"Failed to apply patch: {apply_res.stderr}")
+                return
+                
+            sandbox.commands.run(f"cd {repo_dir} && git commit -a -m 'Fix issue #{issue_num}'")
+            sandbox.commands.run(f"cd {repo_dir} && git push -f origin {branch_name}")
+            
+            from agents.git_provider import get_git_provider
+            git_provider = get_git_provider(repo_url, github_token)
+            
+            pr_result = git_provider.create_pull_request(
+                repo_full_name,
+                branch_name,
+                f"Fix issue #{issue_num}",
+                f"This PR fixes issue #{issue_num}.\n\nIt was automatically recreated by Issue Hunter from the saved patch."
+            )
+            
+            from backend.db import get_hunt, update_hunt_status
+            hunt = get_hunt(hunt_id)
+            import re
+            old_report = hunt.get('report_md', '')
+            if "**Pull Request:**" in old_report:
+                new_report = re.sub(r'\*\*Pull Request:\*\* https://github.com/.*', f'**Pull Request:** {pr_result}', old_report)
+            else:
+                new_report = f"{old_report}\n\n**Pull Request:** {pr_result}"
+            update_hunt_status(hunt_id, "completed", report_md=new_report, branch_name=branch_name)
+            
+        finally:
+            sandbox.kill()
+    except Exception as e:
+        print(f"Fallback recreate PR failed: {e}")
+
 @app.post("/api/hunts/{hunt_id}/recreate-pr")
-async def recreate_pr(hunt_id: str, request: RecreatePRRequest, token: str = Depends(verify_token)):
+async def recreate_pr(hunt_id: str, request: RecreatePRRequest, background_tasks: BackgroundTasks, token: str = Depends(verify_token)):
     hunt = get_hunt(hunt_id)
     if not hunt or hunt.get('status') != 'completed':
         raise HTTPException(status_code=400, detail="Hunt is not completed")
@@ -260,7 +327,16 @@ async def recreate_pr(hunt_id: str, request: RecreatePRRequest, token: str = Dep
         
         return {"status": "success", "pr_url": pr_result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # If PR creation fails (e.g. branch doesn't exist), try fallback
+        diff_content = hunt.get('diff_content')
+        if diff_content:
+            background_tasks.add_task(
+                fallback_recreate_pr_task,
+                hunt_id, repo_url, branch_name, diff_content, request.github_token, issue_num
+            )
+            return {"status": "queued", "message": "Branch missing on GitHub. Fallback recovery started to re-apply the patch in a new Sandbox..."}
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to recreate PR and no diff saved for fallback: {str(e)}")
 
 @app.post("/api/webhook/github")
 async def github_webhook(request: Request):

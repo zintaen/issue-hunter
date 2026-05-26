@@ -214,7 +214,11 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Failed to recreate PR');
-      alert(`PR created successfully! Link: ${data.pr_url}`);
+      if (data.status === 'queued') {
+        alert(data.message);
+      } else {
+        alert(`PR created successfully! Link: ${data.pr_url}`);
+      }
       fetchHunts();
     } catch (err) {
       alert(err.message);
