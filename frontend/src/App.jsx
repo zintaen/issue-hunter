@@ -17,12 +17,12 @@ function parseIssueLink(link) {
 // Status badge component
 function StatusBadge({ status }) {
   const config = {
-    running: { icon: <Loader size={12} className="spin-icon" />, color: '#e0af68', label: 'Running' },
-    completed: { icon: <CheckCircle size={12} />, color: '#9ece6a', label: 'Completed' },
-    failed: { icon: <XCircle size={12} />, color: '#f7768e', label: 'Failed' },
-    pending_approval: { icon: <AlertCircle size={12} />, color: '#7aa2f7', label: 'Needs Approval' },
+    running: { icon: <Loader size={12} className="spin-icon" />, color: 'var(--cs-color-semantic-warning)', label: 'Running' },
+    completed: { icon: <CheckCircle size={12} />, color: 'var(--cs-color-semantic-success)', label: 'Completed' },
+    failed: { icon: <XCircle size={12} />, color: 'var(--cs-color-semantic-danger)', label: 'Failed' },
+    pending_approval: { icon: <AlertCircle size={12} />, color: 'var(--cs-color-semantic-info)', label: 'Needs Approval' },
   };
-  const c = config[status] || { icon: <Clock size={12} />, color: '#565f89', label: status };
+  const c = config[status] || { icon: <Clock size={12} />, color: 'var(--cs-color-text-muted)', label: status };
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: c.color, fontWeight: 600 }}>
       {c.icon} {c.label}
@@ -357,13 +357,13 @@ function App() {
 
   // --- Diff renderer ---
   const renderDiff = (diffStr) => {
-    if (!diffStr) return <div style={{ color: 'var(--text-secondary)' }}>No diff available.</div>;
+    if (!diffStr) return <div style={{ color: 'var(--cs-color-text-muted)' }}>No diff available.</div>;
     return diffStr.split('\n').map((line, i) => {
-      let color = '#a9b1d6', background = 'transparent';
-      if (line.startsWith('+') && !line.startsWith('+++')) { color = '#9ece6a'; background = 'rgba(158, 206, 106, 0.1)'; }
-      else if (line.startsWith('-') && !line.startsWith('---')) { color = '#f7768e'; background = 'rgba(247, 118, 142, 0.1)'; }
-      else if (line.startsWith('@@')) color = '#7aa2f7';
-      return <div key={i} style={{ color, background, fontFamily: 'Fira Code, monospace', whiteSpace: 'pre-wrap', padding: '0 4px' }}>{line || ' '}</div>;
+      let color = 'var(--cs-color-text-primary)', background = 'transparent';
+      if (line.startsWith('+') && !line.startsWith('+++')) { color = 'var(--cs-color-semantic-success)'; background = 'rgba(45, 122, 56, 0.1)'; }
+      else if (line.startsWith('-') && !line.startsWith('---')) { color = 'var(--cs-color-semantic-danger)'; background = 'rgba(169, 35, 35, 0.1)'; }
+      else if (line.startsWith('@@')) color = 'var(--cs-color-semantic-info)';
+      return <div key={i} style={{ color, background, fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'pre-wrap', padding: '0 4px' }}>{line || ' '}</div>;
     });
   };
 
@@ -371,15 +371,15 @@ function App() {
   if (!authToken) {
     return (
       <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div className="glass-panel" style={{ width: '400px', textAlign: 'center' }}>
-          <Lock size={48} style={{ color: 'var(--accent-color)', marginBottom: '1rem' }} />
+        <div className="cs-panel" style={{ width: '400px', textAlign: 'center' }}>
+          <Lock size={48} style={{ color: 'var(--cs-color-brand-umber)', marginBottom: '1rem' }} />
           <h2>Authentication Required</h2>
           <form onSubmit={handleLogin} style={{ marginTop: '2rem' }}>
-            <div className="form-group">
-              <label>Admin Password</label>
-              <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Enter password..." />
+            <div className="cs-field">
+              <label className="cs-field__label">Admin Password</label>
+              <input className="cs-field__control" type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Enter password..." />
             </div>
-            <button className="btn" type="submit" style={{ width: '100%', marginTop: '1rem' }}>Login</button>
+            <button className="cs-button" type="submit" style={{ width: '100%', marginTop: '1rem' }}>Login</button>
           </form>
         </div>
       </div>
@@ -399,27 +399,27 @@ function App() {
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h1>Issue Hunter</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+          <p style={{ color: 'var(--cs-color-text-muted)', marginTop: '0.5rem' }}>
             Autonomous AI agent for fixing open-source bugs.
           </p>
         </div>
-        <button className="btn" style={{ background: 'var(--danger-color)' }} onClick={handleLogout}>Logout</button>
+        <button className="cs-button cs-button--danger cs-button--sm" onClick={handleLogout}>Logout</button>
       </header>
 
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
         {/* Left Sidebar: Hunting List */}
-        <div className="glass-panel" style={{ width: '320px', flexShrink: 0, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div className="cs-panel" style={{ width: '320px', flexShrink: 0, maxHeight: '85vh', overflowY: 'auto' }}>
           <h2><List size={20} /> Hunting List</h2>
           {hunts.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No hunts yet. Start one!</p>
+            <p style={{ color: 'var(--cs-color-text-muted)' }}>No hunts yet. Start one!</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {Object.entries(grouped).map(([repo, rHunts]) => (
                 <div key={repo}>
                   <div style={{
-                    fontWeight: 'bold', fontSize: '0.8rem', color: 'var(--text-secondary)',
+                    fontWeight: 'bold', fontSize: '0.8rem', color: 'var(--cs-color-text-muted)',
                     textTransform: 'uppercase', letterSpacing: '0.05em',
-                    borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.4rem', marginBottom: '0.5rem'
+                    borderBottom: '1px solid rgba(69, 33, 14, 0.1)', paddingBottom: '0.4rem', marginBottom: '0.5rem'
                   }}>
                     {repo}
                   </div>
@@ -430,10 +430,10 @@ function App() {
                         onClick={() => handleSelectHunt(hunt)}
                         style={{
                           padding: '0.6rem 0.75rem',
-                          background: activeHuntId === hunt.id ? 'var(--accent-glow)' : 'rgba(0,0,0,0.2)',
+                          background: activeHuntId === hunt.id ? 'var(--cs-color-surface-page)' : 'transparent',
                           borderRadius: '8px',
                           cursor: 'pointer',
-                          border: `1px solid ${activeHuntId === hunt.id ? 'var(--accent-color)' : 'transparent'}`,
+                          border: `1px solid ${activeHuntId === hunt.id ? 'var(--cs-color-brand-umber)' : 'transparent'}`,
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           transition: 'all 0.15s ease'
                         }}
@@ -442,7 +442,7 @@ function App() {
                           <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>Issue #{hunt.issues}</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
                             <StatusBadge status={hunt.status} />
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--cs-color-text-muted)' }}>
                               {new Date(hunt.created_at).toLocaleDateString()}
                             </span>
                           </div>
@@ -451,7 +451,7 @@ function App() {
                           onClick={(e) => handleDeleteHunt(e, hunt.id)}
                           title="Delete hunt"
                           style={{
-                            background: 'transparent', border: 'none', color: 'var(--text-secondary)',
+                            background: 'transparent', border: 'none', color: 'var(--cs-color-text-muted)',
                             cursor: 'pointer', padding: '4px', borderRadius: '4px',
                             opacity: 0.5, transition: 'opacity 0.15s'
                           }}
@@ -474,60 +474,60 @@ function App() {
           
           <div className="grid-2">
             {/* Configuration Panel */}
-            <div className="glass-panel">
+            <div className="cs-panel">
               <h2><Settings size={20} /> Configuration</h2>
               <div className="grid-2">
-                <div className="form-group">
-                  <label>LLM Provider</label>
-                  <select value={provider} onChange={e => setProvider(e.target.value)}>
+                <div className="cs-field">
+                  <label className="cs-field__label">LLM Provider</label>
+                  <select className="cs-field__control" value={provider} onChange={e => setProvider(e.target.value)}>
                     <option value="gemini">Google Gemini</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
                   </select>
                 </div>
-                <div className="form-group">
-                  <label>Model</label>
-                  <input type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. gemini-3.5-pro" />
+                <div className="cs-field">
+                  <label className="cs-field__label">Model</label>
+                  <input className="cs-field__control" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. gemini-3.5-pro" />
                 </div>
               </div>
-              <div className="form-group">
-                <label><Key size={14} style={{display:'inline', marginRight:4}} /> API Key</label>
-                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Your LLM API Key" />
+              <div className="cs-field">
+                <label className="cs-field__label"><Key size={14} style={{display:'inline', marginRight:4}} /> API Key</label>
+                <input className="cs-field__control" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Your LLM API Key" />
               </div>
-              <div className="form-group">
-                <label><GitBranch size={14} style={{display:'inline', marginRight:4}} /> GitHub Token</label>
-                <input type="password" value={githubToken} onChange={e => setGithubToken(e.target.value)} placeholder="ghp_xxxxxxxxxxxx" />
+              <div className="cs-field">
+                <label className="cs-field__label"><GitBranch size={14} style={{display:'inline', marginRight:4}} /> GitHub Token</label>
+                <input className="cs-field__control" type="password" value={githubToken} onChange={e => setGithubToken(e.target.value)} placeholder="ghp_xxxxxxxxxxxx" />
               </div>
-              <div className="form-group">
-                <label>Custom Base URL (Optional)</label>
-                <input type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="e.g. http://localhost:11434/v1" />
+              <div className="cs-field">
+                <label className="cs-field__label">Custom Base URL (Optional)</label>
+                <input className="cs-field__control" type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="e.g. http://localhost:11434/v1" />
               </div>
             </div>
 
             {/* Target Panel */}
-            <div className="glass-panel">
+            <div className="cs-panel">
               <h2><Crosshair size={20} /> Target Mission</h2>
-              <div className="form-group">
-                <label>GitHub Issue Link</label>
-                <input 
+              <div className="cs-field">
+                <label className="cs-field__label">GitHub Issue Link</label>
+                <input className="cs-field__control"
                   type="text" 
                   value={issueLink} 
                   onChange={e => setIssueLink(e.target.value)}
                   placeholder="https://github.com/owner/repo/issues/123"
                 />
                 {issueLink && parseIssueLink(issueLink) && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '0.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--cs-color-semantic-success)', marginTop: '0.25rem' }}>
                     ✓ Repo: {parseIssueLink(issueLink).repoUrl.split('/').slice(-2).join('/')} · Issue #{parseIssueLink(issueLink).issueNum}
                   </div>
                 )}
                 {issueLink && !parseIssueLink(issueLink) && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--danger-color)', marginTop: '0.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--cs-color-semantic-danger)', marginTop: '0.25rem' }}>
                     ✗ Invalid format. Use: https://github.com/owner/repo/issues/123
                   </div>
                 )}
               </div>
 
-              <button className="btn" onClick={handleStartHunt} disabled={isStarting} style={{ marginTop: '1rem' }}>
+              <button className="cs-button" onClick={handleStartHunt} disabled={isStarting} style={{ marginTop: '1rem' }}>
                 {isStarting ? (
                   <><Loader size={18} className="spin-icon" /> Starting...</>
                 ) : (
@@ -539,18 +539,18 @@ function App() {
 
           {/* Terminal or Report */}
           {activeHuntId && hunts.find(h => h.id === activeHuntId)?.status === 'completed' && hunts.find(h => h.id === activeHuntId)?.report_md ? (
-            <div className="glass-panel" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
+            <div className="cs-panel" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <CheckCircle size={20} color="var(--success-color)" />
-                  <h2 style={{ margin: 0 }}>Mission Accomplished</h2>
+                  <CheckCircle size={20} color="var(--cs-color-semantic-success)" />
+                  <h2 style={{ margin: 0, color: 'var(--cs-color-semantic-success)' }}>Mission Accomplished</h2>
                 </div>
-                <button className="btn" onClick={() => handleRecreatePR(activeHuntId)}>
+                <button className="cs-button" onClick={() => handleRecreatePR(activeHuntId)}>
                   <RefreshCw size={16} style={{ marginRight: '6px' }} />
                   Re-create PR
                 </button>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', border: '1px solid var(--panel-border)', lineHeight: '1.6' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: '#ffffff', borderRadius: '8px', border: '1px solid rgba(69, 33, 14, 0.1)', lineHeight: '1.6' }}>
                 <ReactMarkdown>{hunts.find(h => h.id === activeHuntId).report_md}</ReactMarkdown>
               </div>
             </div>
@@ -564,14 +564,14 @@ function App() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Terminal size={14} /> Agent Live Terminal
-                  {isRunning && <Loader size={12} className="spin-icon" style={{ color: 'var(--warning-color)' }} />}
-                  {activeHuntId && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>({activeHuntId.slice(0,8)}...)</span>}
+                  {isRunning && <Loader size={12} className="spin-icon" style={{ color: 'var(--cs-color-semantic-warning)' }} />}
+                  {activeHuntId && <span style={{ fontSize: '0.7rem', color: 'var(--cs-color-text-muted)' }}>({activeHuntId.slice(0,8)}...)</span>}
                 </div>
                 <button 
                   onClick={() => setLogs([])}
                   style={{
-                    background: 'transparent', border: '1px solid var(--panel-border)', 
-                    color: 'var(--text-secondary)', borderRadius: '4px',
+                    background: 'transparent', border: '1px solid rgba(69, 33, 14, 0.1)', 
+                    color: 'var(--cs-color-text-muted)', borderRadius: '4px',
                     padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer', marginLeft: 'auto'
                   }}
                 >
@@ -580,7 +580,7 @@ function App() {
               </div>
               <div className="terminal-content">
                 {logs.length === 0 ? (
-                  <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                  <div style={{ color: 'var(--cs-color-text-muted)', fontStyle: 'italic' }}>
                     Waiting for mission control... Click a hunt or start a new one.
                   </div>
                 ) : (
@@ -600,23 +600,23 @@ function App() {
 
           {/* Approval Dashboard */}
           {approvalBranch && (
-            <div className="glass-panel" style={{ border: '1px solid var(--accent-glow)', boxShadow: '0 0 20px rgba(99,102,241,0.2)' }}>
+            <div className="cs-panel" style={{ border: '1px solid var(--cs-color-semantic-warning)', boxShadow: '0 0 20px rgba(140, 91, 0, 0.1)' }}>
               <h2><FileCheck size={20} /> Action Required: Approve PR Creation</h2>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Branch <strong style={{color: '#fff'}}>{approvalBranch}</strong> is ready for PR.
+              <p style={{ marginBottom: '1rem', color: 'var(--cs-color-text-muted)' }}>
+                 <strong style={{color: 'var(--cs-color-brand-umber)'}}>{approvalBranch}</strong> is ready for PR.
               </p>
               <div style={{
-                background: '#1a1b26', borderRadius: '8px', padding: '1rem',
+                background: '#ffffff', borderRadius: '8px', padding: '1rem',
                 maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem',
-                border: '1px solid var(--panel-border)'
+                border: '1px solid rgba(69, 33, 14, 0.1)'
               }}>
                 {renderDiff(approvalDiff)}
               </div>
               <div style={{ display: 'flex', gap: '1rem' }}>
-                <button className="btn" style={{ background: 'var(--success-color)' }} onClick={() => handleApprove('approve')}>
+                <button className="cs-button" style={{ background: 'var(--cs-color-semantic-success)' }} onClick={() => handleApprove('approve')}>
                   Approve & Create PR
                 </button>
-                <button className="btn" style={{ background: 'var(--danger-color)' }} onClick={() => handleApprove('reject')}>
+                <button className="cs-button cs-button--danger cs-button--sm" onClick={() => handleApprove('reject')}>
                   Reject
                 </button>
               </div>
