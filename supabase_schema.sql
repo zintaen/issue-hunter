@@ -11,6 +11,7 @@ CREATE TABLE hunts (
     branch_name TEXT,
     diff_content TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     completed_at TIMESTAMP WITH TIME ZONE,
     report_md TEXT
 );
