@@ -8,16 +8,14 @@ from typing import List, Optional
 import os
 import sys
 
-# Add the parent directory to sys.path so we can import agents
+# Add the parent directory (project root) to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Add the current directory so we can import 'db' when run by Vercel
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import traceback
 import_error = None
 try:
     from agents.orchestrator import run_orchestrator
-    from db import init_db, create_hunt, insert_log, update_hunt_status, get_hunts, get_hunt_logs, get_hunt, get_pending_approvals
+    from backend.db import init_db, create_hunt, insert_log, update_hunt_status, get_hunts, get_hunt_logs, get_hunt, get_pending_approvals
 except Exception as e:
     import_error = traceback.format_exc()
 
