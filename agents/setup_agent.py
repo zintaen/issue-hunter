@@ -1,5 +1,5 @@
 import asyncio
-from agents.llm_client import get_client, run_agent_loop
+from agents.llm_client import run_agent_loop
 from agents.tools import (
     sandbox_run, web_search, fetch_webpage,
     e2b_view_file, e2b_write_file, e2b_grep_search

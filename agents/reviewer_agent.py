@@ -1,5 +1,5 @@
 import asyncio
-from agents.llm_client import get_client, run_agent_loop
+from agents.llm_client import run_agent_loop
 from agents.tools import sandbox_run, web_search, fetch_webpage, get_git_diff, e2b_execute_python
 
 async def run_reviewer_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, log_callback=None, provider: str = "gemini", base_url: str = None):
