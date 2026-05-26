@@ -272,11 +272,12 @@ def fallback_recreate_pr_task(hunt_id: str, repo_url: str, branch_name: str, dif
             from agents.git_provider import get_git_provider
             git_provider = get_git_provider(repo_url, github_token)
             
+            from agents.git_provider import generate_pr_body
             pr_result = git_provider.create_pull_request(
                 repo_full_name,
                 branch_name,
                 f"Fix issue #{issue_num}",
-                f"This PR fixes issue #{issue_num}.\n\nIt was automatically recreated by Issue Hunter from the saved patch."
+                generate_pr_body(repo_full_name, issue_num, "This PR was automatically recreated by Issue Hunter from the saved patch.")
             )
             
             from backend.db import get_hunt, update_hunt_status
@@ -313,11 +314,12 @@ async def recreate_pr(hunt_id: str, request: RecreatePRRequest, background_tasks
     repo_full_name = repo_url.replace("https://github.com/", "")
     
     try:
+        from agents.git_provider import generate_pr_body
         pr_result = git_provider.create_pull_request(
             repo_full_name,
             branch_name,
             f"Fix issue #{issue_num}",
-            f"This PR fixes issue #{issue_num}.\n\nIt was automatically recreated by Issue Hunter from the existing branch `{branch_name}`."
+            generate_pr_body(repo_full_name, issue_num, f"This PR was automatically recreated by Issue Hunter from the existing branch `{branch_name}`.")
         )
         # Update the report_md to point to the new PR URL
         import re
