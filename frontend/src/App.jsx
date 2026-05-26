@@ -46,6 +46,7 @@ function App() {
 
   // Execution State
   const [isRunning, setIsRunning] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [activeHuntId, setActiveHuntId] = useState(null);
   const [logs, setLogs] = useState([]);
   const [approvalBranch, setApprovalBranch] = useState(null);
@@ -272,14 +273,7 @@ function App() {
       return;
     }
 
-    // Stop any existing polling
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    setIsRunning(true);
-    setActiveHuntId(null);
-    setApprovalBranch(null);
-    setApprovalDiff(null);
-    setApprovalHuntId(null);
-    setLogs(["[SYSTEM] Connecting to Issue Hunter Backend..."]);
+    setIsStarting(true);
 
     try {
       const res = await fetch('/api/hunt', {
@@ -297,42 +291,44 @@ function App() {
 
       if (!res.ok) throw new Error("Server responded with " + res.status);
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let boundary = buffer.indexOf('\n\n');
-        while (boundary !== -1) {
-          const chunk = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          if (chunk.startsWith('data: ')) {
-            let msg = chunk.slice(6).replace(/__NEWLINE__/g, '\n');
-            if (msg.startsWith('__APPROVAL_REQUIRED__:')) {
-              fetchPendingApprovals();
-            } else {
-              if (msg.startsWith('Workflow queued. Hunt ID: ')) {
-                const hid = msg.split('Hunt ID: ')[1].trim();
-                setActiveHuntId(hid);
+      // Process SSE stream asynchronously to keep Vercel alive
+      (async () => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let hid = null;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let boundary = buffer.indexOf('\n\n');
+            while (boundary !== -1) {
+              const chunk = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+              if (chunk.startsWith('data: ')) {
+                let msg = chunk.slice(6).replace(/__NEWLINE__/g, '\n');
+                if (msg.startsWith('Workflow queued. Hunt ID: ')) {
+                  hid = msg.split('Hunt ID: ')[1].trim();
+                  setIsStarting(false);
+                  setIssueLink('');
+                  fetchHunts();
+                  startPolling(hid); // Switch to the new hunt
+                }
               }
-              setLogs(prev => [...prev, msg]);
+              boundary = buffer.indexOf('\n\n');
             }
           }
-          boundary = buffer.indexOf('\n\n');
+        } catch (err) {
+          console.error("Stream error:", err);
         }
-      }
-      setIsRunning(false);
-      setActiveHuntId(null);
-      fetchHunts();
+        if (hid) fetchHunts(); // Refresh when hunt completes
+      })();
+
     } catch (error) {
       console.error("Failed to start hunt", error);
-      setIsRunning(false);
-      setActiveHuntId(null);
-      setLogs(prev => [...prev, `[ERROR] ${error.message}`]);
-      fetchHunts();
+      setIsStarting(false);
+      alert(`[ERROR] ${error.message}`);
     }
   };
 
@@ -508,9 +504,9 @@ function App() {
                 )}
               </div>
 
-              <button className="btn" onClick={handleStartHunt} disabled={isRunning} style={{ marginTop: '1rem' }}>
-                {isRunning ? (
-                  <><Loader size={18} className="spin-icon" /> Hunting...</>
+              <button className="btn" onClick={handleStartHunt} disabled={isStarting} style={{ marginTop: '1rem' }}>
+                {isStarting ? (
+                  <><Loader size={18} className="spin-icon" /> Starting...</>
                 ) : (
                   <><Play size={18} /> Start Hunt</>
                 )}
