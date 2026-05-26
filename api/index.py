@@ -177,8 +177,8 @@ async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
             yield f"data: {safe_msg}\n\n"
             
         try:
-            report_md = workflow_task.result()
-            update_hunt_status(hunt_id, "completed", report_md=report_md)
+            report_md, branch_name = workflow_task.result()
+            update_hunt_status(hunt_id, "completed", report_md=report_md, branch_name=branch_name)
             
             from backend.db import delete_other_hunts
             delete_other_hunts(hunt_id)
@@ -223,6 +223,44 @@ def delete_hunt_endpoint(hunt_id: str, token: str = Depends(verify_token)):
             
     delete_hunt(hunt_id)
     return {"status": "deleted"}
+
+class RecreatePRRequest(BaseModel):
+    github_token: str
+
+@app.post("/api/hunts/{hunt_id}/recreate-pr")
+async def recreate_pr(hunt_id: str, request: RecreatePRRequest, token: str = Depends(verify_token)):
+    hunt = get_hunt(hunt_id)
+    if not hunt or hunt.get('status') != 'completed':
+        raise HTTPException(status_code=400, detail="Hunt is not completed")
+    
+    branch_name = hunt.get('branch_name')
+    if not branch_name:
+        raise HTTPException(status_code=400, detail="No branch name found for this hunt")
+        
+    repo_url = hunt.get('repo_url')
+    issues = hunt.get('issues', [])
+    issue_num = issues[0] if issues else "unknown"
+    
+    from agents.git_provider import get_git_provider
+    git_provider = get_git_provider(repo_url, request.github_token)
+    repo_full_name = repo_url.replace("https://github.com/", "")
+    
+    try:
+        pr_result = git_provider.create_pull_request(
+            repo_full_name,
+            branch_name,
+            f"Fix issue #{issue_num}",
+            f"This PR fixes issue #{issue_num}.\n\nIt was automatically recreated by Issue Hunter from the existing branch `{branch_name}`."
+        )
+        # Update the report_md to point to the new PR URL
+        import re
+        old_report = hunt.get('report_md', '')
+        new_report = re.sub(r'\*\*Pull Request:\*\* https://github.com/.*', f'**Pull Request:** {pr_result}', old_report)
+        update_hunt_status(hunt_id, "completed", report_md=new_report, branch_name=branch_name)
+        
+        return {"status": "success", "pr_url": pr_result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/webhook/github")
 async def github_webhook(request: Request):

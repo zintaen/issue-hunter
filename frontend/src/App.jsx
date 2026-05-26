@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, List, Lock, X, Trash2, Loader, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { Terminal, Play, Settings, GitBranch, Key, Crosshair, FileCheck, List, Lock, X, Trash2, Loader, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './index.css';
 
@@ -95,6 +95,9 @@ function App() {
         }
       })
       .catch(err => console.error("Error fetching hunts:", err));
+
+    const interval = setInterval(fetchHunts, 3000);
+    return () => clearInterval(interval);
   }, [authToken]);
 
   // --- Polling logic ---
@@ -199,6 +202,22 @@ function App() {
       fetchHunts();
     } catch (err) {
       alert('Failed to delete hunt: ' + err.message);
+    }
+  };
+
+  const handleRecreatePR = async (huntId) => {
+    try {
+      const res = await fetch(`/api/hunts/${huntId}/recreate-pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ github_token: githubToken })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to recreate PR');
+      alert(`PR created successfully! Link: ${data.pr_url}`);
+      fetchHunts();
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -517,9 +536,15 @@ function App() {
           {/* Terminal or Report */}
           {activeHuntId && hunts.find(h => h.id === activeHuntId)?.status === 'completed' && hunts.find(h => h.id === activeHuntId)?.report_md ? (
             <div className="glass-panel" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                <CheckCircle size={20} color="var(--success-color)" />
-                <h2 style={{ margin: 0 }}>Mission Accomplished</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <CheckCircle size={20} color="var(--success-color)" />
+                  <h2 style={{ margin: 0 }}>Mission Accomplished</h2>
+                </div>
+                <button className="btn" onClick={() => handleRecreatePR(activeHuntId)}>
+                  <RefreshCw size={16} style={{ marginRight: '6px' }} />
+                  Re-create PR
+                </button>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', border: '1px solid var(--panel-border)', lineHeight: '1.6' }}>
                 <ReactMarkdown>{hunts.find(h => h.id === activeHuntId).report_md}</ReactMarkdown>

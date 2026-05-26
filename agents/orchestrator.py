@@ -62,6 +62,7 @@ async def run_orchestrator(
         "| Issue | Branch | PR Link | Status |",
         "|---|---|---|---|"
     ]
+    final_branch_name = None
     
     try:
         # Start E2B Sandbox
@@ -141,15 +142,9 @@ async def run_orchestrator(
                             branch_name, 
                             f"Fix issue #{issue_num}", 
                             pr_body
-                        )
-                        await log_with_db(pr_result)
-                        
-                        # Get the diff and append it to the report
-                        diff_content = get_git_diff(clone_dir, branch_name)
-                        diff_text = f"\n\n### Diff\n```diff\n{diff_content}\n```\n" if diff_content else ""
-                        
                         # Use the PR body as the report output so it saves nicely to the database
-                        report_lines.append(f"## Issue #{issue_num}\n\n**Pull Request:** {pr_result}\n\n{pr_body}{diff_text}\n")
+                        report_lines.append(f"## Issue #{issue_num}\n\n**Pull Request:** {pr_result}\n\n{pr_body}\n")
+                        final_branch_name = branch_name
             else:
                 report_lines.append(f"## Issue #{issue_num}\n\n❌ Solver Failed to complete the fix.\n")
                 
@@ -162,4 +157,4 @@ async def run_orchestrator(
     report_content = "\n".join(report_lines)
     
     await log(f"\nWorkflow complete! Report generated.")
-    return report_content
+    return report_content, final_branch_name
