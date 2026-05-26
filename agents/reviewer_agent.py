@@ -1,8 +1,8 @@
 import asyncio
-from agents.tools import run_command, web_search, fetch_webpage, get_git_diff
-from google.antigravity import LocalAgentConfig, Agent
+from agents.llm_client import get_client, run_agent_loop
+from agents.tools import sandbox_run, web_search, fetch_webpage, get_git_diff
 
-async def run_reviewer_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, log_callback = None):
+async def run_reviewer_agent(repo_dir: str, issue_details: str, branch_name: str, api_key: str, model: str = None, log_callback=None, provider: str = "gemini", base_url: str = None):
     """Runs the Reviewer Agent to analyze git diffs and provide feedback."""
     async def log(msg: str):
         if log_callback:
@@ -12,22 +12,16 @@ async def run_reviewer_agent(repo_dir: str, issue_details: str, branch_name: str
                 log_callback(msg)
         else:
             print(msg)
-            
-    tools = [
-        run_command,
-        web_search,
-        fetch_webpage
-    ]
 
     await log("\n[REVIEWER AGENT] Starting code review...")
-    
+
     # Fetch git diff using E2B
     diff_output = get_git_diff(repo_dir, branch_name)
-    
+
     if not diff_output or not diff_output.strip():
         await log("[REVIEWER AGENT] No code changes detected. Rejecting.")
         return False, "No code changes detected in the branch."
-        
+
     system_prompt = """You are the Reviewer Agent. Your job is to review the code changes made by the Solver Agent.
 You will be provided with the original issue description and the `git diff` of the changes.
 Critique the code for:
@@ -40,21 +34,20 @@ You must output exactly one of two decisions at the end of your response:
 [REJECTED] - If the code has issues. You must provide detailed feedback above this tag for the Solver Agent to fix it.
 """
 
-    config = LocalAgentConfig(
-        tools=tools,
-        system_instructions=system_prompt,
-        model=model or "gemini-3.5-pro",
-        api_key=api_key
-    )
-    
+    client = get_client(api_key, provider, base_url)
     prompt = f"Issue Details:\n{issue_details}\n\nGit Diff:\n{diff_output}\n\nPlease review these changes."
-    
+
     await log("[REVIEWER AGENT] Analyzing diff...")
-    async with Agent(config) as agent:
-        response = await agent.chat(prompt)
-        review_text = await response.text()
+    review_text = await run_agent_loop(
+        client=client,
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=prompt,
+        tools=[sandbox_run, web_search, fetch_webpage],
+        log_callback=log_callback,
+    )
     await log(f"[REVIEWER AGENT] Feedback:\n{review_text}")
-    
+
     if "[APPROVED]" in review_text:
         await log("[REVIEWER AGENT] ✅ Code changes approved.")
         return True, ""

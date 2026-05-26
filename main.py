@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument("--repo", type=str, required=True, help="Target repository (e.g. 'owner/repo')")
     parser.add_argument("--issues", type=str, required=True, help="Comma-separated list of issue numbers (e.g. '123,124')")
     parser.add_argument("--model", type=str, default=None, help="Model to use (overrides .env)")
-    parser.add_argument("--provider", type=str, default="gemini", help="LLM Provider (gemini, openai, anthropic)")
+    parser.add_argument("--provider", type=str, default=None, help="AI Provider (openai, anthropic, gemini). Env: AI_PROVIDER")
     parser.add_argument("--api-key", type=str, default=None, help="API Key for the provider")
     parser.add_argument("--workspace", type=str, default="./workspace", help="Directory to clone repositories into")
     parser.add_argument("--dry-run", action="store_true", help="Skip actually creating the Pull Request on GitHub")
@@ -36,20 +36,18 @@ async def main():
         console.print("[red]Error: GITHUB_TOKEN not found in environment and gh cli auth failed.[/red]")
         return
         
-    model = args.model or os.getenv("LLM_MODEL") or "gemini-3.5-pro"
-    provider = args.provider
-    if provider == 'openai':
-        api_key = args.api_key or os.getenv('OPENAI_API_KEY')
-    elif provider == 'anthropic':
-        api_key = args.api_key or os.getenv('ANTHROPIC_API_KEY')
-    else:
-        api_key = args.api_key or os.getenv('GEMINI_API_KEY')
+    model = args.model or os.getenv("AI_MODEL_NAME") or "gemini-3.5-pro"
+    provider = args.provider or os.getenv("AI_PROVIDER") or "gemini"
+    api_key = args.api_key or os.getenv("AI_API_KEY")
+    base_url = args.base_url or os.getenv("AI_BASE_URL")
     
     if not api_key:
-        console.print("[red]Error: API Key not provided.[/red]")
+        console.print("[red]Error: API Key not provided. Set AI_API_KEY or use --api-key.[/red]")
         return
         
     console.print(f"[green]Using provider: {provider}, model: {model}[/green]")
+    if base_url:
+        console.print(f"[green]Custom base URL: {base_url}[/green]")
     
     issue_numbers = [int(i.strip()) for i in args.issues.split(",") if i.strip().isdigit()]
     if not issue_numbers:
@@ -70,7 +68,7 @@ async def main():
             model=model,
             provider=provider,
             dry_run=args.dry_run,
-            base_url=args.base_url
+            base_url=base_url
         )
     except KeyboardInterrupt:
         console.print("[yellow]\nWorkflow interrupted by user.[/yellow]")

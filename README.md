@@ -66,9 +66,18 @@ Open `http://localhost:5173` in your browser.
 npx vercel --prod
 ```
 Set the following environment variables in your Vercel dashboard:
-- `SUPABASE_URL`, `SUPABASE_KEY`
-- `E2B_API_KEY`
-- `ADMIN_PASSWORD`
+
+| Variable | Description |
+|---|---|
+| `ADMIN_PASSWORD` | Password to log into the UI |
+| `AI_API_KEY` | Your AI provider API key |
+| `AI_PROVIDER` | `openai`, `anthropic`, or `gemini` |
+| `AI_MODEL_NAME` | e.g. `gemini-3.5-pro`, `gpt-4o`, `mimo-v2.5` |
+| `AI_BASE_URL` | *(optional)* Custom API endpoint URL |
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_KEY` | Your Supabase anon key |
+| `E2B_API_KEY` | Your E2B API key |
+| `GITHUB_TOKEN` | GitHub PAT for webhook-triggered hunts |
 
 ## CLI Usage
 ```bash
@@ -83,7 +92,10 @@ python main.py \
 ```yaml
 - uses: your-username/issue-hunter@main
   with:
-    api-key: ${{ secrets.GEMINI_API_KEY }}
+    api-key: ${{ secrets.AI_API_KEY }}
+    provider: gemini
+    model: gemini-3.5-pro
+    # base-url: https://custom-endpoint.example.com/v1  # optional
     github-token: ${{ secrets.GITHUB_TOKEN }}
     e2b-api-key: ${{ secrets.E2B_API_KEY }}
     supabase-url: ${{ secrets.SUPABASE_URL }}

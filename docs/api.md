@@ -54,4 +54,4 @@ Submits approval or rejection for a pending hunt.
 ### `POST /api/webhook/github`
 Listens for GitHub issue comments containing `@issue-hunter fix this` to automatically trigger a workflow.
 - **Note:** On Vercel, this runs synchronously and may exceed GitHub's webhook timeout, but the function will continue executing.
-- **Required env vars:** `LLM_API_KEY`, `GITHUB_TOKEN`, `LLM_PROVIDER`, `LLM_MODEL`
+- **Required env vars:** `AI_API_KEY`, `GITHUB_TOKEN`, `AI_PROVIDER`, `AI_MODEL_NAME`

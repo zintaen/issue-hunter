@@ -1,5 +1,5 @@
 # Core
-google-antigravity
+openai>=1.30.0
 PyGithub
 e2b_code_interpreter
 python-dotenv

@@ -4,6 +4,9 @@ branding:
   icon: 'cpu'
   color: 'blue'
 inputs:
+  api-key:
+    description: 'API key for the LLM provider'
+    required: true
   provider:
     description: 'LLM Provider (gemini, openai, anthropic)'
     required: false
@@ -12,9 +15,9 @@ inputs:
     description: 'LLM Model (e.g., gemini-3.5-pro, gpt-4o, claude-sonnet-4)'
     required: false
     default: 'gemini-3.5-pro'
-  api-key:
-    description: 'API key for the LLM provider'
-    required: true
+  base-url:
+    description: 'Custom base URL for the LLM API endpoint'
+    required: false
   github-token:
     description: 'GitHub token for cloning and PRs'
     required: true
@@ -52,10 +55,14 @@ runs:
           --issues "${{ inputs.issue-number }}" \
           --provider "${{ inputs.provider }}" \
           --model "${{ inputs.model }}" \
-          --api-key "${{ inputs.api-key }}"
+          --api-key "${{ inputs.api-key }}" \
+          ${{ inputs.base-url && format('--base-url "{0}"', inputs.base-url) || '' }}
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         E2B_API_KEY: ${{ inputs.e2b-api-key }}
         SUPABASE_URL: ${{ inputs.supabase-url }}
         SUPABASE_KEY: ${{ inputs.supabase-key }}
+        AI_API_KEY: ${{ inputs.api-key }}
+        AI_PROVIDER: ${{ inputs.provider }}
+        AI_MODEL_NAME: ${{ inputs.model }}

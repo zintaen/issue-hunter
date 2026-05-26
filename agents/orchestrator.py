@@ -39,24 +39,9 @@ async def run_orchestrator(
     async def log_with_db(msg: str):
         await log(msg)
 
-    if provider == "openai":
-        os.environ["OPENAI_API_KEY"] = api_key
-        if base_url:
-            os.environ["OPENAI_API_BASE"] = base_url
-        await log(f"Native routing for OpenAI model: {model}")
-    elif provider == "anthropic":
-        os.environ["ANTHROPIC_API_KEY"] = api_key
-        if base_url:
-            os.environ["ANTHROPIC_API_BASE"] = base_url
-        await log(f"Native routing for Anthropic model: {model}")
-    else:
-        os.environ["GEMINI_API_KEY"] = api_key
-        if base_url:
-            os.environ["GEMINI_API_BASE"] = base_url
-        else:
-            if "GEMINI_API_BASE" in os.environ:
-                del os.environ["GEMINI_API_BASE"]
-        await log(f"Native routing for Gemini model: {model}")
+    await log(f"Using AI: provider={provider}, model={model}")
+    if base_url:
+        await log(f"Custom base URL: {base_url}")
 
     await log(f"Starting Issue Hunter workflow for {target_repo}...")
     
@@ -86,7 +71,7 @@ async def run_orchestrator(
         fork_and_clone_repo(repo_full_name, clone_dir)
         
         await log("\n--- Phase 1: Setup & Analysis ---")
-        setup_summary = await run_setup_agent(clone_dir, api_key, model, log_callback)
+        setup_summary = await run_setup_agent(clone_dir, api_key, model, log_callback, provider=provider, base_url=base_url)
         await log("Setup Phase Complete.\n")
         
         await log(f"\n--- Phase 2: Processing {len(issue_numbers)} Issues ---")
@@ -105,7 +90,7 @@ async def run_orchestrator(
             
             for attempt in range(max_retries):
                 await log(f"\n[ATTEMPT {attempt + 1}/{max_retries}] Running Solver Agent...")
-                solver_result = await run_solver_agent(clone_dir, issue_details, branch_name, api_key, model, previous_feedback, log_callback)
+                solver_result = await run_solver_agent(clone_dir, issue_details, branch_name, api_key, model, previous_feedback, log_callback, provider=provider, base_url=base_url)
                 
                 if not solver_result:
                     await log("Solver Agent failed to complete its execution.")
@@ -114,7 +99,7 @@ async def run_orchestrator(
                 solver_success, solver_summary = solver_result
                     
                 await log(f"\n[ATTEMPT {attempt + 1}/{max_retries}] Running Reviewer Agent...")
-                reviewer_approved, feedback = await run_reviewer_agent(clone_dir, issue_details, branch_name, api_key, model, log_callback)
+                reviewer_approved, feedback = await run_reviewer_agent(clone_dir, issue_details, branch_name, api_key, model, log_callback, provider=provider, base_url=base_url)
                 
                 if reviewer_approved:
                     success = True

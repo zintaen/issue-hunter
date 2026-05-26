@@ -57,7 +57,7 @@ def fork_and_clone_repo(repo_full_name: str, target_dir: str) -> str:
     
     return f"Cloned into E2B: {res.stdout}"
 
-def run_command(command: str) -> str:
+def sandbox_run(command: str) -> str:
     """Run a command inside the E2B sandbox."""
     global active_sandbox, active_container_dir
     if not active_sandbox:
@@ -87,25 +87,25 @@ def e2b_write_file(filepath: str, content: str) -> str:
         
 def e2b_grep_search(query: str) -> str:
     """Search the codebase using grep inside the E2B sandbox."""
-    res = run_command(f"grep -rnw . -e {shlex.quote(query)}")
+    res = sandbox_run(f"grep -rnw . -e {shlex.quote(query)}")
     return res
 
 def create_branch(repo_dir: str, branch_name: str) -> str:
     """Create a new git branch in the E2B sandbox."""
-    return run_command(f"git checkout -b {branch_name}")
+    return sandbox_run(f"git checkout -b {branch_name}")
 
 def commit_and_push(repo_dir: str, branch_name: str, commit_message: str) -> str:
     """Commit all changes and push the branch in the E2B sandbox."""
-    run_command("git add -A")
-    run_command(f"git commit -m {shlex.quote(commit_message)}")
-    res = run_command(f"git push -u origin {branch_name}")
+    sandbox_run("git add -A")
+    sandbox_run(f"git commit -m {shlex.quote(commit_message)}")
+    res = sandbox_run(f"git push -u origin {branch_name}")
     return res
 
 def get_git_diff(repo_dir: str, branch_name: str) -> str:
     """Get the git diff between the branch and origin/main."""
-    res = run_command(f"git diff origin/main...{branch_name}")
+    res = sandbox_run(f"git diff origin/main...{branch_name}")
     if not res or "fatal" in res:
-        res = run_command(f"git diff origin/master...{branch_name}")
+        res = sandbox_run(f"git diff origin/master...{branch_name}")
     return res
 
 def web_search(query: str, num_results: int = 5) -> str:

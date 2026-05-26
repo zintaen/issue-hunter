@@ -177,11 +177,11 @@ async def github_webhook(request: Request):
             repo_url = f"https://github.com/{parts[3]}/{parts[4]}"
             issue_num = int(parts[6])
             
-            api_key = os.getenv("LLM_API_KEY", "")
+            api_key = os.getenv("AI_API_KEY", "")
             github_token = os.getenv("GITHUB_TOKEN", "")
-            base_url = os.getenv("LLM_BASE_URL", None)
-            provider = os.getenv("LLM_PROVIDER", "gemini")
-            model = os.getenv("LLM_MODEL", "gemini-3.5-pro")
+            base_url = os.getenv("AI_BASE_URL", None)
+            provider = os.getenv("AI_PROVIDER", "gemini")
+            model = os.getenv("AI_MODEL_NAME", "gemini-3.5-pro")
             
             if not api_key or not github_token:
                 return {"status": "ignored: missing keys"}
