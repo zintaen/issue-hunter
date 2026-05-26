@@ -44,8 +44,7 @@ def fork_and_clone_repo(repo_full_name: str, target_dir: str) -> str:
     clone_url = fork.clone_url.replace("https://", f"https://{user.login}:{global_github_token}@")
     
     global active_sandbox, active_container_dir
-    active_container_dir = f"/workspace/{repo.name}"
-    
+    active_container_dir = f"/home/user/workspace/{repo.name}"
     if not active_sandbox:
         return "Sandbox not running."
         
