@@ -50,16 +50,30 @@ function App() {
   };
 
   useEffect(() => {
-    fetchHunts();
-    // On page load, check if there was a running hunt and reconnect
-    if (authToken && activeHuntId) {
-      reconnectToHunt(activeHuntId);
-    }
+    if (!authToken) return;
+    
+    // Fetch hunts, then check if any are running
+    fetch('/api/hunts', {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setHunts(data);
+        // Auto-reconnect to the most recent running hunt
+        const runningHunt = data.find(h => h.status === 'running');
+        if (runningHunt && !pollRef.current) {
+          setActiveHuntId(runningHunt.id);
+          localStorage.setItem('active_hunt_id', runningHunt.id);
+          reconnectToHunt(runningHunt.id);
+        }
+      })
+      .catch(err => console.error("Error fetching hunts:", err));
   }, [authToken]);
 
   // Poll logs for a running hunt (reconnect after page reload)
   const reconnectToHunt = async (huntId) => {
     setIsRunning(true);
+    setSelectedHunt(null);
     setLogs(['[SYSTEM] Reconnecting to running hunt...']);
     
     // Load existing logs first
@@ -83,8 +97,9 @@ function App() {
         const huntRes = await fetch('/api/hunts', {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        const hunts = await huntRes.json();
-        const hunt = hunts.find(h => h.id === huntId);
+        const allHunts = await huntRes.json();
+        setHunts(allHunts); // Keep sidebar fresh
+        const hunt = allHunts.find(h => h.id === huntId);
         
         if (!hunt || hunt.status !== 'running') {
           // Hunt finished — load final logs and stop polling
@@ -98,7 +113,6 @@ function App() {
           localStorage.removeItem('active_hunt_id');
           clearInterval(pollRef.current);
           pollRef.current = null;
-          fetchHunts();
           if (hunt && hunt.status === 'pending_approval') {
             fetchPendingApprovals();
           }
