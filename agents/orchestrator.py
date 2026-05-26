@@ -142,6 +142,7 @@ async def run_orchestrator(
                             branch_name, 
                             f"Fix issue #{issue_num}", 
                             pr_body
+                        )
                         # Use the PR body as the report output so it saves nicely to the database
                         report_lines.append(f"## Issue #{issue_num}\n\n**Pull Request:** {pr_result}\n\n{pr_body}\n")
                         final_branch_name = branch_name
