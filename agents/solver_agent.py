@@ -1,7 +1,6 @@
-import os
 from google.antigravity import Agent, LocalAgentConfig, types
 from agents.tools import (
-    run_command_in_docker, create_branch, commit_and_push, web_search, fetch_webpage,
+    run_command, create_branch, commit_and_push, web_search, fetch_webpage,
     e2b_view_file, e2b_write_file, e2b_grep_search
 )
 import asyncio
@@ -23,7 +22,7 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
         return commit_and_push(repo_dir, branch_name, commit_message)
         
     tools = [
-        run_command_in_docker,
+        run_command,
         bound_create_branch,
         bound_commit_and_push,
         web_search,
@@ -47,12 +46,12 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
         "You are an expert autonomous software engineer. Your task is to fix a bug in a codebase based on a GitHub issue. "
         "The repository is mounted at `/workspace` inside a secure E2B Sandbox for command execution.\n\n"
         "STEPS:\n"
-        "1. You MUST use `e2b_grep_search` and `run_command_in_docker('find .')` to find relevant code snippets related to the issue before doing manual searches.\n"
+        "1. You MUST use `e2b_grep_search` and `run_command('find .')` to find relevant code snippets related to the issue before doing manual searches.\n"
         "2. Use `web_search` and `fetch_webpage` to lookup documentation or stack overflow if you are unsure about a library or API.\n"
         "3. Use `e2b_view_file` to read the relevant code, and `e2b_write_file` to rewrite files with your fixes.\n"
         "4. Create a new branch using `create_branch`.\n"
         "5. Write the fix and write a unit test to verify it.\n"
-        "6. Use `run_command_in_docker` to run the tests and ensure the fix works.\n"
+        "6. Use `run_command` to run the tests and ensure the fix works.\n"
         "7. Commit and push the branch using `commit_and_push(branch_name, commit_message)`.\n\n"
         "Always explain your reasoning before making changes."
     )
@@ -73,7 +72,7 @@ async def run_solver_agent(repo_dir: str, issue_details: str, branch_name: str, 
         if previous_feedback:
             prompt += f"\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED BY THE REVIEWER. Here is the feedback:\n{previous_feedback}\nPlease try again and fix these issues."
 
-        prompt += "\n\nRemember to create the branch first, implement the fix, test it via `run_command_in_docker`, and finally commit and push."
+        prompt += "\n\nRemember to create the branch first, implement the fix, test it via `run_command`, and finally commit and push."
         
         response = await agent.chat(prompt)
         final_summary = await response.text()

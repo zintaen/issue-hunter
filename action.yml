@@ -1,5 +1,5 @@
 name: 'Issue Hunter'
-description: 'Autonomous AI agents that resolve GitHub, GitLab, and Bitbucket issues.'
+description: 'Autonomous AI agents that resolve GitHub issues by analyzing code, generating fixes, and opening Pull Requests.'
 branding:
   icon: 'cpu'
   color: 'blue'
@@ -9,8 +9,9 @@ inputs:
     required: false
     default: 'gemini'
   model:
-    description: 'LLM Model (e.g., gemini-3.5-pro, gpt-4o, claude-3-opus)'
+    description: 'LLM Model (e.g., gemini-3.5-pro, gpt-4o, claude-sonnet-4)'
     required: false
+    default: 'gemini-3.5-pro'
   api-key:
     description: 'API key for the LLM provider'
     required: true
@@ -18,20 +19,43 @@ inputs:
     description: 'GitHub token for cloning and PRs'
     required: true
     default: ${{ github.token }}
-  repository:
-    description: 'Target repository url (e.g., https://github.com/org/repo)'
+  e2b-api-key:
+    description: 'E2B API key for cloud sandboxing'
     required: true
-    default: ${{ github.server_url }}/${{ github.repository }}
+  supabase-url:
+    description: 'Supabase project URL'
+    required: true
+  supabase-key:
+    description: 'Supabase anon key'
+    required: true
+  repository:
+    description: 'Target repository (e.g., owner/repo)'
+    required: true
+    default: ${{ github.repository }}
   issue-number:
     description: 'Issue number to resolve'
     required: true
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
-  args:
-    - ${{ inputs.provider }}
-    - ${{ inputs.model }}
-    - ${{ inputs.api-key }}
-    - ${{ inputs.github-token }}
-    - ${{ inputs.repository }}
-    - ${{ inputs.issue-number }}
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: pip install -r ${{ github.action_path }}/requirements.txt
+      shell: bash
+    - name: Run Issue Hunter
+      run: |
+        python ${{ github.action_path }}/main.py \
+          --repo "${{ inputs.repository }}" \
+          --issues "${{ inputs.issue-number }}" \
+          --provider "${{ inputs.provider }}" \
+          --model "${{ inputs.model }}" \
+          --api-key "${{ inputs.api-key }}"
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        E2B_API_KEY: ${{ inputs.e2b-api-key }}
+        SUPABASE_URL: ${{ inputs.supabase-url }}
+        SUPABASE_KEY: ${{ inputs.supabase-key }}

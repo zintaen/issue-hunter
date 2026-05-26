@@ -1,12 +1,11 @@
 import os
 import asyncio
-import re
 from typing import List
 from agents.tools import (
     init_clients,
     fork_and_clone_repo,
-    start_docker_container,
-    cleanup_docker_container,
+    start_sandbox,
+    cleanup_sandbox,
     get_git_diff
 )
 from agents.setup_agent import run_setup_agent
@@ -81,7 +80,7 @@ async def run_orchestrator(
     
     try:
         # Start E2B Sandbox
-        start_docker_container(clone_dir)
+        start_sandbox(clone_dir)
         
         # Fork and Clone inside E2B
         fork_and_clone_repo(repo_full_name, clone_dir)
@@ -139,6 +138,7 @@ async def run_orchestrator(
                     if not approved:
                         await log(f"PR Creation rejected by user for branch '{branch_name}'")
                         report_lines.append(f"| #{issue_num} | `{branch_name}` | N/A | ❌ Rejected |")
+                        continue
                     if not dry_run:
                         await log_with_db("Creating Pull Request...")
                         pr_result = git_provider.create_pull_request(
@@ -155,13 +155,10 @@ async def run_orchestrator(
     finally:
         # 7. Cleanup
         await log("\nCleaning up...")
-        cleanup_docker_container()
+        cleanup_sandbox()
         
     # 8. Generate Report
     report_content = "\n".join(report_lines)
-    report_path = os.path.join(workspace_base_dir, f"report_{repo_name}.md")
-    with open(report_path, "w") as f:
-        f.write(report_content)
     
-    await log(f"\nWorkflow complete! Report generated at: {report_path}")
+    await log(f"\nWorkflow complete! Report generated.")
     return report_content

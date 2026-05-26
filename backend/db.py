@@ -4,13 +4,19 @@ import uuid
 from datetime import datetime
 from supabase import create_client, Client
 
+_supabase_client = None
+
 def get_supabase() -> Client:
+    global _supabase_client
+    if _supabase_client:
+        return _supabase_client
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_KEY")
     if not url or not key:
         print("WARNING: SUPABASE_URL or SUPABASE_KEY not set. Database operations will be skipped.")
         return None
-    return create_client(url, key)
+    _supabase_client = create_client(url, key)
+    return _supabase_client
 
 def init_db():
     # Supabase tables should be initialized via the SQL Editor using the provided script.

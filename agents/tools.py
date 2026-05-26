@@ -1,5 +1,5 @@
 import os
-import json
+import shlex
 from github import Github
 from e2b_code_interpreter import Sandbox
 
@@ -13,18 +13,19 @@ def init_clients(github_token: str, workspace: str):
     global_github_token = github_token
     github_client = Github(github_token)
 
-def start_docker_container(repo_dir: str, image: str = "ubuntu:24.04") -> str:
+def start_sandbox(repo_dir: str) -> str:
+    """Start an E2B cloud sandbox for secure code execution."""
     global active_sandbox
     api_key = os.environ.get("E2B_API_KEY")
     if not api_key:
         print("WARNING: E2B_API_KEY not found. Operations requiring execution will fail.")
         return "Failed"
     active_sandbox = Sandbox(api_key=api_key)
-    # Ensure git is installed in standard E2B environments
     active_sandbox.commands.run("sudo apt-get update && sudo apt-get install -y git")
     return "E2B Cloud Sandbox started successfully."
 
-def cleanup_docker_container() -> str:
+def cleanup_sandbox() -> str:
+    """Kill the active E2B sandbox."""
     global active_sandbox
     if active_sandbox:
         active_sandbox.kill()
@@ -32,6 +33,7 @@ def cleanup_docker_container() -> str:
     return "E2B Sandbox cleaned up."
 
 def fork_and_clone_repo(repo_full_name: str, target_dir: str) -> str:
+    """Fork and clone a repository into the E2B sandbox."""
     repo = github_client.get_repo(repo_full_name)
     user = github_client.get_user()
     try:
@@ -55,7 +57,8 @@ def fork_and_clone_repo(repo_full_name: str, target_dir: str) -> str:
     
     return f"Cloned into E2B: {res.stdout}"
 
-def run_command_in_docker(command: str) -> str:
+def run_command(command: str) -> str:
+    """Run a command inside the E2B sandbox."""
     global active_sandbox, active_container_dir
     if not active_sandbox:
         return "Error: No active E2B sandbox."
@@ -63,12 +66,18 @@ def run_command_in_docker(command: str) -> str:
     return f"Exit Code: {res.exit_code}\nOutput:\n{res.stdout}\n{res.stderr}"
 
 def e2b_view_file(filepath: str) -> str:
+    """View a file inside the E2B sandbox."""
     global active_sandbox, active_container_dir
+    if not active_sandbox:
+        return "Error: No active E2B sandbox."
     res = active_sandbox.commands.run(f"cat {filepath}", cwd=active_container_dir)
     return res.stdout if res.exit_code == 0 else res.stderr
 
 def e2b_write_file(filepath: str, content: str) -> str:
+    """Write content to a file inside the E2B sandbox."""
     global active_sandbox, active_container_dir
+    if not active_sandbox:
+        return "Error: No active E2B sandbox."
     full_path = os.path.join(active_container_dir, filepath)
     try:
         active_sandbox.files.write(full_path, content)
@@ -77,43 +86,30 @@ def e2b_write_file(filepath: str, content: str) -> str:
         return f"Error writing file: {e}"
         
 def e2b_grep_search(query: str) -> str:
-    # Use grep to search codebase
-    res = run_command_in_docker(f"grep -rnw . -e '{query}'")
+    """Search the codebase using grep inside the E2B sandbox."""
+    res = run_command(f"grep -rnw . -e {shlex.quote(query)}")
     return res
 
-def fetch_issue_details(repo_full_name: str, issue_number: int) -> str:
-    repo = github_client.get_repo(repo_full_name)
-    issue = repo.get_issue(issue_number)
-    return f"Title: {issue.title}\n\nBody:\n{issue.body}"
-
 def create_branch(repo_dir: str, branch_name: str) -> str:
-    return run_command_in_docker(f"git checkout -b {branch_name}")
+    """Create a new git branch in the E2B sandbox."""
+    return run_command(f"git checkout -b {branch_name}")
 
 def commit_and_push(repo_dir: str, branch_name: str, commit_message: str) -> str:
-    run_command_in_docker("git add -A")
-    run_command_in_docker(f"git commit -m '{commit_message}'")
-    res = run_command_in_docker(f"git push -u origin {branch_name}")
+    """Commit all changes and push the branch in the E2B sandbox."""
+    run_command("git add -A")
+    run_command(f"git commit -m {shlex.quote(commit_message)}")
+    res = run_command(f"git push -u origin {branch_name}")
     return res
 
 def get_git_diff(repo_dir: str, branch_name: str) -> str:
-    res = run_command_in_docker(f"git diff origin/main...{branch_name}")
+    """Get the git diff between the branch and origin/main."""
+    res = run_command(f"git diff origin/main...{branch_name}")
     if not res or "fatal" in res:
-        res = run_command_in_docker(f"git diff origin/master...{branch_name}")
+        res = run_command(f"git diff origin/master...{branch_name}")
     return res
 
-def create_pull_request(repo_full_name: str, branch_name: str, title: str, body: str) -> str:
-    upstream_repo = github_client.get_repo(repo_full_name)
-    user = github_client.get_user()
-    head = f"{user.login}:{branch_name}"
-    pr = upstream_repo.create_pull(
-        title=title,
-        body=body,
-        head=head,
-        base=upstream_repo.default_branch
-    )
-    return f"Created PR: {pr.html_url}"
-
 def web_search(query: str, num_results: int = 5) -> str:
+    """Search the web using DuckDuckGo."""
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:
@@ -126,6 +122,7 @@ def web_search(query: str, num_results: int = 5) -> str:
         return f"Web search failed: {e}"
 
 def fetch_webpage(url: str) -> str:
+    """Fetch and extract text from a webpage."""
     try:
         import httpx
         from bs4 import BeautifulSoup

@@ -1,28 +1,53 @@
 # Architecture Overview
 
-Issue Hunter operates as a robust agentic application separated into frontend, backend, and agent logic.
+Issue Hunter is a full-stack agentic application deployed on Vercel with external services for persistence and code execution.
 
-## 1. System Components
-- **Frontend (React / Vite):** Presents a clean Glassmorphism interface. Manages state for Hunt Configuration, Live Terminal streaming via WebSockets, History parsing, and the interactive Diff Viewer.
-- **Backend (FastAPI):** Exposes REST API endpoints and WebSockets for real-time Agent communication. Manages the SQLite database for persistence.
-- **Agent Orchestrator (Antigravity SDK):** The core engine residing in `agents/orchestrator.py`. Handles the multi-step workflows of cloning repositories, setting up Docker sandboxes, initializing RAG embeddings, and dispatching tasks to specific sub-agents. It natively routes prompts to any underlying LLM (OpenAI, Anthropic, Gemini) by managing API keys directly in the environment, making the SDK model-agnostic.
+## System Components
 
-## 2. Multi-Agent Workflow
-1. **Setup Agent:** Inspects the repository structure and ensures the issue can be reproduced within the Docker container.
-2. **Solver Agent:** Equipped with the `semantic_search` tool, it queries ChromaDB for relevant AST nodes and rewrites source files to fix the issue.
-3. **Reviewer Agent:** Critiques the generated git diff. If the fix fails criteria, it kicks the context back to the Solver Agent (max 3 retries).
-4. **Approval Block:** Emits an `[APPROVAL_REQUIRED]` socket event. Pauses execution entirely while the frontend displays the diff viewer.
-5. **Committer:** Once the human approves, pushes the branch and creates the Pull Request using the abstract `GitProvider`.
+### Frontend (React / Vite)
+A glassmorphism-styled dashboard that provides:
+- Hunt configuration (repo URL, issue numbers, LLM settings)
+- Live terminal streaming via Server-Sent Events (SSE)
+- Interactive diff viewer for human-in-the-loop approval
+- Hunt history and benchmark management
 
-## 3. Git Provider Abstraction
-To support GitHub, GitLab, and Bitbucket uniformly, `agents/git_provider.py` enforces a unified `GitProvider` interface with abstract methods:
-- `get_issue_details(repo, issue_id)`
-- `create_pull_request(repo, title, body, head_branch, base_branch)`
+Deployed as static assets on Vercel.
 
-`GitHubProvider` wraps `PyGithub`, while `GitLabProvider` and `BitbucketProvider` are structured mock interfaces ready for API implementations.
+### Backend (FastAPI / Vercel Serverless)
+Serverless Python functions that expose REST API endpoints. Key constraints:
+- **Read-only filesystem** — all state persists in Supabase
+- **300s max execution** (Vercel Pro) — long-running hunts stream via SSE within this window
+- **No WebSockets** — replaced with SSE for real-time communication
+- **No Docker daemon** — code execution delegated to E2B cloud sandboxes
 
-## 4. RAG Implementation (Retrieval-Augmented Generation)
-`agents/indexer.py` handles the chunking.
-- It parses Python source code into an Abstract Syntax Tree (`ast`).
-- It maps unique `file_path::node_name::index` IDs for every Class and Function to prevent ChromaDB collisions.
-- It embeds the source code using `sentence-transformers` and upserts it into the local `chromadb` instance.
+### Agent Orchestrator (Antigravity SDK)
+The core engine in `agents/orchestrator.py` that coordinates the multi-agent workflow:
+1. **Setup Agent** — Analyzes the repository structure and verifies the build system
+2. **Solver Agent** — Locates relevant code and implements the fix
+3. **Reviewer Agent** — Critiques the git diff; rejects trigger retry loops (max 3)
+4. **Approval Gate** — Streams `__APPROVAL_REQUIRED__` signal; polls Supabase for user decision
+5. **PR Creation** — Pushes the branch and creates the Pull Request via the Git provider
+
+### External Services
+
+| Service | Purpose |
+|---|---|
+| **Supabase** | PostgreSQL database for hunt tracking, logs, and approval state |
+| **E2B** | Secure, ephemeral cloud Linux sandboxes for executing git, npm, pytest, etc. |
+| **LLM Providers** | Gemini, OpenAI, or Anthropic — routed natively via Antigravity SDK |
+
+## Git Provider Abstraction
+`agents/git_provider.py` implements a strategy pattern supporting GitHub (via PyGithub), GitLab (via python-gitlab), and Bitbucket (via atlassian-python-api).
+
+## Data Flow
+```
+User → Frontend → POST /api/hunt → SSE Stream
+                                      │
+                                      ├─ Orchestrator starts E2B sandbox
+                                      ├─ Clones repo into sandbox
+                                      ├─ Runs Setup → Solver → Reviewer loop
+                                      ├─ Streams logs to frontend via SSE
+                                      ├─ On approval needed: writes to Supabase, polls
+                                      ├─ On approval: pushes branch, creates PR
+                                      └─ Returns final report
+```

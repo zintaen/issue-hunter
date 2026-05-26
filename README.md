@@ -1,58 +1,102 @@
 # Issue Hunter
 
-**Issue Hunter** is an autonomous AI agent designed to resolve open-source bugs. Built with a React frontend and a FastAPI backend using the Google Antigravity SDK, it connects to your code repository, reproduces issues, generates fixes, and requests human approval before opening a pull request.
+**Issue Hunter** is an autonomous AI agent that resolves open-source bugs. It connects to your GitHub repository, analyzes issues, generates fixes in a secure cloud sandbox, and opens Pull Requests — all with human-in-the-loop approval.
+
+Built with **React + Vite** frontend, **FastAPI** backend, and the **Google Antigravity SDK** for multi-agent orchestration. Deployed on **Vercel** with **Supabase** for persistence and **E2B** for secure code execution.
 
 ## Features
 
-### 1. Multi-Git Provider Architecture (GitHub, GitLab, Bitbucket)
-Issue Hunter supports an extensible `GitProvider` strategy pattern, allowing it to seamlessly interface with major platforms natively via API SDKs (`python-gitlab`, `httpx`). The orchestrator dynamically routes operations to the correct provider based on the repository URL.
+- **Multi-Agent Workflow** — Setup, Solver, and Reviewer agents collaborate with retry loops to produce high-quality fixes
+- **Multi-LLM Support** — Native routing for Google Gemini, OpenAI, and Anthropic models
+- **Multi-Git Provider** — Extensible architecture supporting GitHub, GitLab, and Bitbucket
+- **Cloud Sandboxing (E2B)** — Secure, ephemeral Linux environments for code execution — no Docker required
+- **Human-in-the-Loop** — Interactive diff viewer for reviewing and approving changes before PR creation
+- **Real-time Streaming** — Server-Sent Events (SSE) for live agent terminal output
+- **GitHub Action** — Run headlessly in CI/CD pipelines via `action.yml`
+- **Agent Web Browsing** — Agents can search the web and fetch documentation while solving issues
 
-### 2. Multi-Language Codebase Search (Tree-sitter & RAG)
-To prevent agents from getting lost in massive codebases, Issue Hunter employs a local vector database (`ChromaDB`).
-- **Tree-sitter Chunking:** Deep structural AST parsing for Python, TypeScript, JavaScript, and Go ensures semantic integrity when indexing.
-- **Semantic Search Tool:** The `semantic_search` tool allows agents to query the codebase using natural language to retrieve exact logic chunks.
+## Architecture
 
-### 3. Native Multi-LLM Provider Support
-Issue Hunter maps API keys directly to the native Google Antigravity SDK environment variables, allowing seamless use of `gemini`, `openai`, and `anthropic` providers without the need for proxy middlewares.
-
-### 4. Agent Web Browsing
-The agents are equipped with `web_search` and `fetch_webpage` tools, giving them the ability to look up Stack Overflow discussions or external documentation while solving issues.
-
-### 5. Human-in-the-Loop Diff Viewer
-Before submitting a pull request, Issue Hunter requires human approval. A custom-built, lightweight React diff component provides a visual representation of proposed changes. Approving authorizes the agent to push the branch and open a PR.
-
-### 6. GitHub Action Headless Mode
-Issue Hunter can be executed headlessly within your CI/CD pipelines via the provided `action.yml` package.
+```
+┌─────────────────────┐     SSE Stream      ┌──────────────────────┐
+│   React Frontend    │◄────────────────────►│  FastAPI (Vercel)    │
+│   (Vite + Vercel)   │     REST API         │  Serverless Funcs    │
+└─────────────────────┘                      └──────────┬───────────┘
+                                                        │
+                                    ┌───────────────────┼───────────────────┐
+                                    │                   │                   │
+                              ┌─────▼─────┐     ┌──────▼──────┐    ┌───────▼───────┐
+                              │ Supabase  │     │ E2B Sandbox │    │ Antigravity   │
+                              │ (DB/Logs) │     │ (Execution) │    │ SDK (Agents)  │
+                              └───────────┘     └─────────────┘    └───────────────┘
+```
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js (v24+)
 - Python (3.12+)
+- A [Supabase](https://supabase.com) project
+- An [E2B](https://e2b.dev) API key
+- An LLM API key (Gemini, OpenAI, or Anthropic)
 
-### Local Setup
+### 1. Set Up Supabase
+Create a Supabase project and run `supabase_schema.sql` in the SQL Editor to create the required tables.
 
-1. **Start the Backend:**
-   ```bash
-   pip install -r requirements.txt
-   cd backend
-   uvicorn server:app --port 8000 --reload
-   ```
+### 2. Configure Environment
+```bash
+cp .env.example .env
+# Edit .env with your keys
+```
 
-2. **Start the Frontend:**
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+### 3. Local Development
+```bash
+# Backend
+pip install -r requirements.txt
+cd backend && uvicorn server:app --port 8000 --reload
 
-3. **Configure the Hunt:**
-   Open `http://localhost:5175` in your browser. Enter your target repository, the issue number, your Git Provider token, and your LLM API Key to start a hunt!
+# Frontend (separate terminal)
+cd frontend && npm install && npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+### 4. Deploy to Vercel
+```bash
+npx vercel --prod
+```
+Set the following environment variables in your Vercel dashboard:
+- `SUPABASE_URL`, `SUPABASE_KEY`
+- `E2B_API_KEY`
+- `ADMIN_PASSWORD`
+
+## CLI Usage
+```bash
+python main.py \
+  --repo owner/repo \
+  --issues 123,124 \
+  --provider gemini \
+  --api-key YOUR_KEY
+```
+
+## GitHub Action
+```yaml
+- uses: your-username/issue-hunter@main
+  with:
+    api-key: ${{ secrets.GEMINI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    e2b-api-key: ${{ secrets.E2B_API_KEY }}
+    supabase-url: ${{ secrets.SUPABASE_URL }}
+    supabase-key: ${{ secrets.SUPABASE_KEY }}
+    issue-number: '123'
+```
 
 ## Agent Workflow
-1. **Setup Phase:** Clones the repository, sets up the environment, and indexes the codebase.
-2. **Reproduction Phase:** Attempts to reproduce the issue using context or by writing test cases.
-3. **Solving Phase:** Uses semantic search and web browsing to locate and solve the bug.
-4. **Review Phase:** A secondary agent reviews the code changes.
-5. **Approval Phase:** Pauses and waits for user approval via the UI Diff Viewer.
-6. **PR Phase:** The fix is pushed and a Pull Request is automatically generated.
+1. **Setup Phase** — Clones the repository into an E2B cloud sandbox and analyzes the build system
+2. **Solving Phase** — Uses code search and web browsing to locate and fix the bug
+3. **Review Phase** — A secondary agent reviews the code changes (up to 3 retry loops)
+4. **Approval Phase** — Pauses for human approval via the UI diff viewer
+5. **PR Phase** — Pushes the branch and opens a Pull Request
+
+## License
+MIT

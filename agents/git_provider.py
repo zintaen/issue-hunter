@@ -25,10 +25,12 @@ class GitHubProvider(GitProvider):
     def create_pull_request(self, repo_full_name: str, branch_name: str, title: str, body: str) -> str:
         try:
             repo = self.client.get_repo(repo_full_name)
+            user = self.client.get_user()
+            head = f"{user.login}:{branch_name}"
             pr = repo.create_pull(
                 title=title,
                 body=body,
-                head=branch_name,
+                head=head,
                 base=repo.default_branch
             )
             return f"Pull Request Created: {pr.html_url}"

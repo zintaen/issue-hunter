@@ -1,20 +1,20 @@
+# Core
 google-antigravity
 PyGithub
-GitPython
 e2b_code_interpreter
 python-dotenv
 rich
+
+# Backend
 fastapi
-uvicorn
+uvicorn[standard]
 supabase
-chromadb
-sentence-transformers
+
+# Git providers
 python-gitlab
 atlassian-python-api
-tree-sitter
-tree-sitter-python
-tree-sitter-javascript
-tree-sitter-typescript
-tree-sitter-go
+
+# Agent tools
 duckduckgo-search
 beautifulsoup4
+httpx

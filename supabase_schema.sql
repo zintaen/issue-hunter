@@ -1,10 +1,13 @@
+-- Issue Hunter - Supabase Schema
+-- Run this in your Supabase SQL Editor to initialize the database.
+
 CREATE TABLE hunts (
     id UUID PRIMARY KEY,
     repo_url TEXT NOT NULL,
-    issues TEXT NOT NULL,
+    issues JSONB NOT NULL,
     provider TEXT NOT NULL,
     model TEXT NOT NULL,
-    status TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
     branch_name TEXT,
     diff_content TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -18,3 +21,24 @@ CREATE TABLE logs (
     log_text TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Performance indexes
+CREATE INDEX idx_hunts_status ON hunts(status);
+CREATE INDEX idx_hunts_created_at ON hunts(created_at DESC);
+CREATE INDEX idx_logs_hunt_id ON logs(hunt_id);
+CREATE INDEX idx_logs_created_at ON logs(created_at);
+
+-- Enable Row Level Security
+ALTER TABLE hunts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE logs ENABLE ROW LEVEL SECURITY;
+
+-- Allow the service role (backend) full access
+CREATE POLICY "Service role full access on hunts"
+    ON hunts FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Service role full access on logs"
+    ON logs FOR ALL
+    USING (true)
+    WITH CHECK (true);

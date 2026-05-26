@@ -16,6 +16,7 @@ def parse_args():
     parser.add_argument("--api-key", type=str, default=None, help="API Key for the provider")
     parser.add_argument("--workspace", type=str, default="./workspace", help="Directory to clone repositories into")
     parser.add_argument("--dry-run", action="store_true", help="Skip actually creating the Pull Request on GitHub")
+    parser.add_argument("--base-url", type=str, default=None, help="Custom base URL for the LLM provider")
     return parser.parse_args()
 
 async def main():
@@ -35,9 +36,14 @@ async def main():
         console.print("[red]Error: GITHUB_TOKEN not found in environment and gh cli auth failed.[/red]")
         return
         
-    model = args.model or os.getenv("GEMINI_MODEL") or "gemini-3.5-pro"
+    model = args.model or os.getenv("LLM_MODEL") or "gemini-3.5-pro"
     provider = args.provider
-    api_key = args.api_key or os.getenv("GEMINI_API_KEY")
+    if provider == 'openai':
+        api_key = args.api_key or os.getenv('OPENAI_API_KEY')
+    elif provider == 'anthropic':
+        api_key = args.api_key or os.getenv('ANTHROPIC_API_KEY')
+    else:
+        api_key = args.api_key or os.getenv('GEMINI_API_KEY')
     
     if not api_key:
         console.print("[red]Error: API Key not provided.[/red]")
@@ -63,7 +69,8 @@ async def main():
             api_key=api_key,
             model=model,
             provider=provider,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            base_url=args.base_url
         )
     except KeyboardInterrupt:
         console.print("[yellow]\nWorkflow interrupted by user.[/yellow]")
