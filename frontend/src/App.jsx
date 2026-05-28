@@ -421,7 +421,9 @@ function App() {
                     textTransform: 'uppercase', letterSpacing: '0.05em',
                     borderBottom: '1px solid rgba(69, 33, 14, 0.1)', paddingBottom: '0.4rem', marginBottom: '0.5rem'
                   }}>
-                    {repo}
+                    <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }} className="hover:underline">
+                      {repo}
+                    </a>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                     {rHunts.map(hunt => (
@@ -439,7 +441,23 @@ function App() {
                         }}
                       >
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>Issue #{hunt.issues}</div>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                            Issue {hunt.issues.map((iss, i) => (
+                              <React.Fragment key={iss}>
+                                <a 
+                                  href={`https://github.com/${repo}/issues/${iss}`} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  onClick={e => e.stopPropagation()} 
+                                  style={{ color: 'inherit', textDecoration: 'none' }} 
+                                  className="hover:underline"
+                                >
+                                  #{iss}
+                                </a>
+                                {i < hunt.issues.length - 1 ? ', ' : ''}
+                              </React.Fragment>
+                            ))}
+                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
                             <StatusBadge status={hunt.status} />
                             <span style={{ fontSize: '0.7rem', color: 'var(--cs-color-text-muted)' }}>

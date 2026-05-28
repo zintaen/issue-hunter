@@ -133,6 +133,23 @@ def get_hunts():
                                 "status": "failed", 
                                 "report_md": h.get('report_md')
                             }).eq("id", h['id']).execute()
+                            
+                            # Attempt to kill the sandbox
+                            try:
+                                logs = get_hunt_logs(h['id'])
+                                sandbox_id = None
+                                for log in logs:
+                                    if "[SANDBOX_ID:" in log:
+                                        sandbox_id = log.split("[SANDBOX_ID:")[1].split("]")[0]
+                                        break
+                                if sandbox_id:
+                                    api_key = os.environ.get("E2B_API_KEY")
+                                    if api_key:
+                                        from e2b_code_interpreter import Sandbox
+                                        Sandbox.kill(sandbox_id, api_key=api_key)
+                                        print(f"Killed sandbox {sandbox_id} for timed out hunt {h['id']}")
+                            except Exception as e:
+                                print(f"Failed to kill sandbox for timed out hunt {h['id']}: {e}")
                     except Exception as e:
                         print(f"Error parsing date or updating stale hunt {h.get('id')}: {e}")
             
