@@ -442,21 +442,29 @@ function App() {
                       >
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-                            Issue {hunt.issues.map((iss, i) => (
-                              <React.Fragment key={iss}>
-                                <a 
-                                  href={`https://github.com/${repo}/issues/${iss}`} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
-                                  onClick={e => e.stopPropagation()} 
-                                  style={{ color: 'inherit', textDecoration: 'none' }} 
-                                  className="hover:underline"
-                                >
-                                  #{iss}
-                                </a>
-                                {i < hunt.issues.length - 1 ? ', ' : ''}
-                              </React.Fragment>
-                            ))}
+                            Issue {(() => {
+                              let issuesArray = [];
+                              try {
+                                issuesArray = typeof hunt.issues === 'string' ? JSON.parse(hunt.issues) : (hunt.issues || []);
+                              } catch (e) {
+                                issuesArray = [hunt.issues];
+                              }
+                              return issuesArray.map((iss, i) => (
+                                <React.Fragment key={iss}>
+                                  <a 
+                                    href={`https://github.com/${repo}/issues/${iss}`} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    onClick={e => e.stopPropagation()} 
+                                    style={{ color: 'inherit', textDecoration: 'none' }} 
+                                    className="hover:underline"
+                                  >
+                                    #{iss}
+                                  </a>
+                                  {i < issuesArray.length - 1 ? ', ' : ''}
+                                </React.Fragment>
+                              ));
+                            })()}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
                             <StatusBadge status={hunt.status} />
