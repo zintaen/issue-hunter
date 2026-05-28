@@ -185,7 +185,9 @@ async def start_hunt(request: HuntRequest, token: str = Depends(verify_token)):
             
             yield f"data: Workflow completed successfully.\n\n"
         except Exception as e:
-            update_hunt_status(hunt_id, "failed")
+            error_msg = f"[ERROR] Workflow failed: {str(e)}\n{traceback.format_exc()}"
+            insert_log(hunt_id, error_msg)
+            update_hunt_status(hunt_id, "failed", report_md=f"**Workflow failed**\n\n```\n{str(e)}\n```")
             yield f"data: Workflow failed: {str(e)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

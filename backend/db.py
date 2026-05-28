@@ -127,6 +127,8 @@ def get_hunts():
                             if not h.get('report_md'):
                                 h['report_md'] = "Process timed out and was killed by the server environment."
                             
+                            insert_log(h['id'], "[ERROR] Process timed out and was killed by the server environment (e.g. Vercel max execution time).")
+                            
                             supabase.table('hunts').update({
                                 "status": "failed", 
                                 "report_md": h.get('report_md')
