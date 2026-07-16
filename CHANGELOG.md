@@ -5,4 +5,4 @@ release (Keep-a-Changelog style; the CyberOS status page's Changelog tab reads t
 
 ## [0.1.0] - 2026-07-12
 
-- CyberOS initialised: FR workflow vendored to .cyberos/, backlog at docs/feature-requests/BACKLOG.md, status page at .cyberos/status.html.
+- CyberOS initialised: task workflow vendored to .cyberos/, backlog at docs/tasks/BACKLOG.md, status page at .cyberos/status.html.

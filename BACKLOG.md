@@ -1,4 +1,4 @@
-# Issue Hunter - Backlog & Feature Requests
+# Issue Hunter - Backlog & Tasks
 
 ## High Priority (Next Up)
 
